@@ -24,9 +24,10 @@ fi
 cd "$top"
 dir="${1%/}"
 
-# 標準入力の 4 桁の番号のうち最大のもの（無ければ 0）。
+# 標準入力の 4 桁の番号のうち最大のもの（無ければ 0）。grep は一致が無いと終了コード 1 を返し、pipefail で
+# スクリプトごと終わる（ADR が 1 本も無いリポジトリで何も出さずに失敗していた）ので、それは失敗にしない。
 max_number() {
-  grep -oE '^[0-9]{4}' | awk 'BEGIN { m = 0 } { n = $1 + 0; if (n > m) m = n } END { print m }'
+  { grep -oE '^[0-9]{4}' || true; } | awk 'BEGIN { m = 0 } { n = $1 + 0; if (n > m) m = n } END { print m }'
 }
 
 files_max="$( (ls "$dir" 2>/dev/null || true) | max_number)"
