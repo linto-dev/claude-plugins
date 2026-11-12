@@ -1,0 +1,13 @@
+{
+  "name": "plan-phases",
+  "description": "要件定義から計画、フェーズごとの実装、PR の仕上げまでを、人に聞かないワーカーで進める開発フロー（Cloudflare と TypeScript のモノレポ向け）",
+  "version": "0.1.0",
+  "author": {
+    "name": "linto-dev",
+    "url": "https://github.com/linto-dev"
+  },
+  "homepage": "https://github.com/linto-dev/claude-plugins/tree/main/plugins/plan-phases",
+  "repository": "https://github.com/linto-dev/claude-plugins",
+  "license": "MIT",
+  "keywords": ["planning", "requirements", "implementation-plan", "headless", "github", "cloudflare", "typescript"]
+}

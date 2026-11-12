@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: 共通のスクリプトの試験
+        run: python3 -I -B -m unittest discover -s plugins/plan-phases/skills/plan-phases-shared/tests -v
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: マーケットプレイスとプラグインの形
+        run: |
+          npx -y @anthropic-ai/claude-code@2.1.322 plugin validate .
+          npx -y @anthropic-ai/claude-code@2.1.322 plugin validate plugins/plan-phases
