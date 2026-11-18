@@ -21,7 +21,7 @@ Claude Code の会話で次を打ちます。
 
 shipstack は Claude Code の CLI・スキル・フック・プラグインの仕様と、Claude のモデルの推奨に頼っています。頼っている約束を [.claude/skills/checking-shipstack/contracts.json](.claude/skills/checking-shipstack/contracts.json) に書き、毎朝 7:07（日本時間）の Claude Code の scheduled task「shipstack の点検」が `checking-shipstack` スキルで確かめます。
 
-- 前回見たところからの Claude Code の変更履歴と、公式の文書 20 ページの差分を、`scripts/collect.py` が集める（判断はしない）
+- 前回見たところからの Claude Code の変更履歴と、公式の文書 22 ページの差分を、`scripts/collect.py` が集める（判断はしない）
 - 約束ごとに、必須（壊れる・非推奨になる）・取り入れ候補・影響なしに分ける。必須は `claude/shipstack-check-<日付>` で直して draft PR にし、取り入れ候補は報告する。マージは人が行う
 - 結果は、タスクのプッシュ通知から開いた会話の最後の発言
 - どこまで見たか（見た版と文書の写し）は、Cloudflare R2 のバケット `shipstack-checks`（linto のアカウント）の `runs/<UTC の日時>/` に残す。上書きせず、90 日でライフサイクルの規則が消す（変化が無くても 30 日ごとに書き直す）

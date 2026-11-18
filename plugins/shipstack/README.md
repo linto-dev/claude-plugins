@@ -39,7 +39,7 @@
 
 ## 要るもの
 
-- Claude Code 2.1.295 以上（2.1.322 で確かめた）
+- Claude Code 2.1.295 以上（2.1.327 で確かめた）
 - GitHub のリポジトリと、ログイン済みの `gh`（機能の PR を作り、CI の結果を読む）
 - GitHub Actions の CI（ワーカーは push の後の CI を、次のフェーズと仕上げで確かめる）
 - `git`、`python3`（3.9 以上）、`jq`
@@ -55,7 +55,7 @@ Claude Code の会話で次を打ちます。
 /plugin install shipstack@linto-dev
 ```
 
-ワーカーは `claude -p` で動くので、ワーカーを動かす設定のフォルダ（`CLAUDE_CONFIG_DIR`。既定は `~/.claude`）ごとに入れます。更新は `/plugin marketplace update linto-dev` で受け取ります。
+要件定義と計画を打つ設定のフォルダ（`CLAUDE_CONFIG_DIR`。既定は `~/.claude`）に入れます。ワーカー（`claude -p`）には、指揮役が `--plugin-dir` で自分と同じ版のプラグインを読ませるので、ワーカーだけを 2 つ目のアカウントで動かすときは、そのアカウントに入れなくても動きます。更新は `/plugin marketplace update linto-dev` で受け取ります。
 
 ### 前の名前（plan-phases）から移る
 
@@ -73,7 +73,7 @@ claude plugin install shipstack@linto-dev
 
 ## 使い方
 
-1. リポジトリのルートで Claude Code を開き、`/shipstack:defining-requirements <要求>` を打つ。計画のディレクトリは、リポジトリの隣の `plans/<計画名>/` に作られる（リポジトリの外に置き、コミットしない）。作業フォルダの外なので、`/add-dir <計画の置き場所>` を打つ
+1. リポジトリのルートで Claude Code を開き、`/shipstack:defining-requirements <要求>` を打つ。計画のディレクトリは、リポジトリの隣の `plans/<計画名>/` に作られる（リポジトリの外に置き、コミットしない）。作業フォルダの外なので、計画の置き場所が既にあれば、スキルを打つ前に `/add-dir <計画の置き場所>` を打つ（打たなくても、書くたびに許可を聞かれるだけで進む。スキルの途中で打つと、そこでスキルのエフォートが外れる）
 2. 新しい会話で `/shipstack:writing-implementation-plan <計画のディレクトリ>` を打つ。最後の報告に、指揮役を動かすコマンド（プラグインの場所を埋めたもの）が出る
 3. 計画を読んで承認し、「開始前に人がすること」を済ませてから、リポジトリのルートで指揮役を動かす
 
@@ -101,6 +101,7 @@ Claude Opus 5.5 の公式の推奨（既定の `medium` から始めて明示し
 ## 守っていること
 
 - ワーカーは `--permission-mode auto` で動き、決まりのフック（`guard.py`）が force push、main への push、PR のマージ、履歴の書き換えなどを止めます。フックが落ちたり時間切れになったりしたときも、コマンドを通さずに止めます（`onFailure: block`）
+- 指揮役は、ワーカーが auto mode で始まったこと、shipstack を読み込んだこと、`--settings` のフックが動くこと（`--bare` などでは動かない）を、モデルを呼ぶ前に確かめ、合わなければ止めます。利用者とリポジトリの設定の `ultracode` と `disableAllHooks` は、ワーカーには効かせません（[起動の確かめ](skills/shipstack-shared/README.md#起動の確かめ)）
 - 計画書と要件定義書はリポジトリの外に置く使い捨ての文書です。コミットメッセージとコードには、計画書が無いと読めない番号や名前を書きません（`commit-check` が止める）
 - 残すべき決定は、全フェーズの後に ADR と `docs/domain/`・`docs/security.md` に書きます
 

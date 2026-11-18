@@ -9,6 +9,13 @@ FAKE_CLAUDE_HANG にワーカーの名前を入れると、そのワーカーは
 FAKE_CLAUDE_RETRY に回数を入れると、始めにその回数だけ API の再試行の記録を流す。
 FAKE_CLAUDE_TRANSCRIPTS があれば、本物と同じ場所（$CLAUDE_CONFIG_DIR/projects/<作業フォルダ>/<会話の ID>.jsonl）に、起動 1 回につき発言 1 件（入力 1,000・出力 100 トークン、エフォート xhigh）の会話の記録を書き足す。
 --resume で起動されたら、再開のプロンプトに引いた最初の指示（「/<スキル> <対象>」）のワーカーとして続ける。
+
+本物と同じく、始めに --settings の SessionStart のフックを動かして hook_response を流し、続けて system/init（permissionMode と、
+--plugin-dir で読んだプラグイン）を流す。起動の確かめは、次の環境変数で試す。どれかが付いていると、init の後は指揮役に止められるのを
+待ち、止められなければ何もせずに終わる。
+FAKE_CLAUDE_NO_HOOKS: フックが動かない（--bare など）。FAKE_CLAUDE_PERMISSION_MODE: その権限のモードで始まった（auto mode が使えない）。
+FAKE_CLAUDE_NO_PLUGIN: プラグインが読み込めなかった。
+FAKE_CLAUDE_PLUGIN_PATH を付けると、読んだプラグインの場所をその値にする（別の場所の同じ名前のプラグインが読まれた）。
 """
 
 import json
@@ -26,6 +33,31 @@ if LOG:
     with open(LOG, "a") as f:
         f.write(json.dumps({"argv": sys.argv[1:], "prompt": prompt,
                             "watchdog": os.environ.get("CLAUDE_CODE_RETRY_WATCHDOG")}, ensure_ascii=False) + "\n")
+
+
+def option(name):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
+
+
+settings = json.loads(option("--settings") or "{}")
+if not os.environ.get("FAKE_CLAUDE_NO_HOOKS") and settings.get("disableAllHooks") is not True:
+    for group in settings.get("hooks", {}).get("SessionStart", []):
+        for hook in group.get("hooks", []):
+            ran = subprocess.run(hook["command"], shell=True, capture_output=True, text=True)
+            print(json.dumps({"type": "system", "subtype": "hook_response", "hook_name": "SessionStart:startup",
+                              "hook_event": "SessionStart", "output": ran.stdout + ran.stderr, "stdout": ran.stdout,
+                              "stderr": ran.stderr, "exit_code": ran.returncode, "outcome": "success"}), flush=True)
+plugins = []
+if option("--plugin-dir") and not os.environ.get("FAKE_CLAUDE_NO_PLUGIN"):
+    manifest = json.loads((Path(option("--plugin-dir")) / ".claude-plugin" / "plugin.json").read_text())
+    plugins.append({"name": manifest["name"], "path": os.environ.get("FAKE_CLAUDE_PLUGIN_PATH") or option("--plugin-dir"),
+                    "source": f"{manifest['name']}@inline", "version": manifest.get("version")})
+print(json.dumps({"type": "system", "subtype": "init", "permissionMode": os.environ.get("FAKE_CLAUDE_PERMISSION_MODE")
+                  or option("--permission-mode"), "plugins": plugins}), flush=True)
+if any(os.environ.get(k) for k in ("FAKE_CLAUDE_NO_HOOKS", "FAKE_CLAUDE_PERMISSION_MODE", "FAKE_CLAUDE_NO_PLUGIN")):
+    time.sleep(30)
+    sys.exit(1)
+
 quoted = re.search(r"「(/[^」]+)」", prompt)
 skill, target = (quoted.group(1) if "--resume" in sys.argv and quoted else prompt).split(" ", 1)
 skill = skill.lstrip("/").split(":")[-1]  # /<プラグイン>:<スキル>
