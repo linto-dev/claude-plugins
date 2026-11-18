@@ -177,7 +177,7 @@
 
 ## guard.py が止めるもの
 
-各スキルの frontmatter の `hooks` から、役目を引数にして呼ばれます。指揮役（`shipstack run`）は、同じものをワーカーに `--settings` の `hooks` でも渡します（再開した会話ではスキルのフックが登録されないため。[上](#途中で切れたとき)）。止めたら理由を Claude に返します（終了コード 2）。指揮役はスクリプトなので、フックは通りません。
+各スキルの frontmatter の `hooks` から、役目を引数にして呼ばれます。指揮役（`shipstack run`）は、同じものをワーカーに `--settings` の `hooks` でも渡します（再開した会話ではスキルのフックが登録されないため。[上](#途中で切れたとき)）。止めたら理由を Claude に返します（終了コード 2）。フックが落ちたり時間切れ（30 秒）になったりしたときも、`onFailure: block` でコマンドを止めます（Claude Code の既定では、失敗したフックはコマンドを通す。[公式の説明](https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails)）。指揮役はスクリプトなので、フックは通りません。
 
 | 役目 | 使うスキル | 止めるもの（全員に共通のものに加えて） |
 | --- | --- | --- |
@@ -189,7 +189,7 @@
 
 コマンドは `shlex` で読み、引用符の中、ヒアドキュメントの本文、リダイレクト（`2>&1`、`> /dev/null`）は見ません。間違いを止めるためのもので、わざと回り込む相手を防ぐものではありません。
 
-フックのコマンドは `"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh"` です。プラグインのスキルの frontmatter のフックでは `CLAUDE_PLUGIN_ROOT` が使え、`${CLAUDE_SKILL_DIR}` は展開されません（2026-11-13 に Claude Code 2.1.322 で確かめた）。見つからないとフックの失敗は素通りになるので、置き場所を変えるときは、このパスも直します。`claude -p` でも、スキルの frontmatter のフックは動きます（2026-11-05 に確かめた）。
+フックのコマンドは `"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh"` です。プラグインのスキルの frontmatter のフックでは `CLAUDE_PLUGIN_ROOT` が使え、`${CLAUDE_SKILL_DIR}` は展開されません（2026-11-13 に Claude Code 2.1.322 で確かめた）。`onFailure: block` も、スキルの frontmatter のフックと `--settings` のフックの両方で効きます（2026-11-18 に 2.1.327 で、落ちるフックを置いて確かめた。無いとコマンドが通り、有ると止まる）。見つからないと、フックの失敗としてすべての Bash が止まるので、置き場所を変えるときは、このパスも直します。`claude -p` でも、スキルの frontmatter のフックは動きます（2026-11-05 に確かめた）。
 
 ## 試験
 
@@ -201,4 +201,4 @@ python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/
 
 ## 要るもの
 
-python3（3.9 以上）、git、gh、Claude Code 2.1.259 以上（`--permission-prompts`）。
+python3（3.9 以上）、git、gh、Claude Code 2.1.295 以上（`--permission-prompts` と、フックの `onFailure`）。

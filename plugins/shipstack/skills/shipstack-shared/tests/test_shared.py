@@ -296,6 +296,20 @@ class Fixture(unittest.TestCase):
         return json.loads(self.gh_state.read_text())
 
 
+class GuardHookTest(unittest.TestCase):
+    def test_worker_skills_block_when_the_guard_fails(self):
+        """ワーカーのスキルの frontmatter のフックは、役目を付けて guard.sh を呼び、落ちたり時間切れになったりしたら止める。
+        Claude Code の既定では、失敗したフックはコマンドを通す。"""
+        skills = HERE.parent.parent
+        roles = {"implementing-plan-phase": "implement", "merging-main-into-feature": "merge-main",
+                 "recording-plan-decisions": "decisions", "finalizing-feature-pr": "finalize"}
+        for skill, role in roles.items():
+            frontmatter = (skills / skill / "SKILL.md").read_text(encoding="utf-8").split("---\n")[1]
+            self.assertIn(f"""command: '"${{CLAUDE_PLUGIN_ROOT}}/skills/shipstack-shared/scripts/guard.sh" {role}'""",
+                          frontmatter, skill)
+            self.assertRegex(frontmatter, r"\n {10}onFailure: block\n", skill)
+
+
 class GuardTest(Fixture):
     def setUp(self):
         super().setUp()
@@ -706,8 +720,10 @@ class RunTest(Fixture):
         for call in calls:
             settings = json.loads(call["argv"][call["argv"].index("--settings") + 1])
             self.assertNotIn("permissions", settings)
-            command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-            self.assertEqual(command, f"{SCRIPTS / 'guard.sh'} {roles[call['prompt'].split()[0].lstrip('/').split(':')[-1]]}")
+            hook = settings["hooks"]["PreToolUse"][0]["hooks"][0]
+            self.assertEqual(hook["command"], f"{SCRIPTS / 'guard.sh'} {roles[call['prompt'].split()[0].lstrip('/').split(':')[-1]]}")
+            # フックが落ちたり時間切れになったりしても、コマンドを通さない
+            self.assertEqual(hook["onFailure"], "block")
             self.assertEqual(call["watchdog"], "1")
         self.assertFalse((self.plan / ".runs" / "active.json").exists())
         self.assertEqual(calls[0]["prompt"], f"{implement_command()} {self.plan / 'phase-01.md'}")
@@ -871,6 +887,7 @@ class RunTest(Fixture):
         # 再開した会話にはスキルのフックが登録されないので、決まりのフックは指揮役が渡す
         settings = json.loads(p2[1]["argv"][p2[1]["argv"].index("--settings") + 1])
         self.assertTrue(settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"].endswith("guard.sh implement"))
+        self.assertEqual(settings["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"], "block")
         self.assertFalse((self.plan / ".runs" / "active.json").exists())
 
     def test_rerun_continues_after_auto_resumes_run_out(self):

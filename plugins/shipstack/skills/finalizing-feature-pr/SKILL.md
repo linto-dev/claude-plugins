@@ -11,6 +11,7 @@ hooks:
         - type: command
           command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" finalize'
           timeout: 30
+          onFailure: block
 ---
 
 # 機能の PR を仕上げる

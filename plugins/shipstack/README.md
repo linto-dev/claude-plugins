@@ -39,7 +39,7 @@
 
 ## 要るもの
 
-- Claude Code（2.1.322 で確かめた）
+- Claude Code 2.1.295 以上（2.1.322 で確かめた）
 - GitHub のリポジトリと、ログイン済みの `gh`（機能の PR を作り、CI の結果を読む）
 - GitHub Actions の CI（ワーカーは push の後の CI を、次のフェーズと仕上げで確かめる）
 - `git`、`python3`（3.9 以上）、`jq`
@@ -100,7 +100,7 @@ Claude Opus 5.5 の公式の推奨（既定の `medium` から始めて明示し
 
 ## 守っていること
 
-- ワーカーは `--permission-mode auto` で動き、決まりのフック（`guard.py`）が force push、main への push、PR のマージ、履歴の書き換えなどを止めます
+- ワーカーは `--permission-mode auto` で動き、決まりのフック（`guard.py`）が force push、main への push、PR のマージ、履歴の書き換えなどを止めます。フックが落ちたり時間切れになったりしたときも、コマンドを通さずに止めます（`onFailure: block`）
 - 計画書と要件定義書はリポジトリの外に置く使い捨ての文書です。コミットメッセージとコードには、計画書が無いと読めない番号や名前を書きません（`commit-check` が止める）
 - 残すべき決定は、全フェーズの後に ADR と `docs/domain/`・`docs/security.md` に書きます
 

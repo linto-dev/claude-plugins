@@ -11,6 +11,7 @@ hooks:
         - type: command
           command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" implement'
           timeout: 30
+          onFailure: block
 ---
 
 # 計画の 1 フェーズを実装する

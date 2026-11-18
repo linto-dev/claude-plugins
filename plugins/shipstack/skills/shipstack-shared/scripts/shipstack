@@ -1838,8 +1838,11 @@ def claude_command(plan: Plan, step: dict, session_id: str, resume_from: str | N
         # 許可ルールに合う操作は分類器を通らずに通る。合わない部分をつなぐと分類器に回る（スキルが単独で実行させる）。
         settings["permissions"] = {"allow": plan.allow_rules}
     # 再開した会話ではスキルのフックが登録されないので、同じ決まりのフックをここでも渡す（新しい会話では 2 回動くが、結果は同じ）。
+    # フックが落ちたり時間切れになったりしたときは、既定ではコマンドが通る。onFailure: block で止める（2.1.295 以上。
+    # https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails 。2026-11-18 に 2.1.327 で確かめた）。
     settings["hooks"] = {"PreToolUse": [{"matcher": "Bash", "hooks": [
-        {"type": "command", "command": f"{shlex.quote(str(GUARD))} {GUARD_ROLES[kind]}", "timeout": 30}]}]}
+        {"type": "command", "command": f"{shlex.quote(str(GUARD))} {GUARD_ROLES[kind]}", "timeout": 30,
+         "onFailure": "block"}]}]}
     cmd += ["--settings", json.dumps(settings, ensure_ascii=False)]
     # --add-dir は値をいくつでも取るので最後に置き、プロンプトは標準入力で渡す。
     return cmd + ["--add-dir", str(plan.dir)]

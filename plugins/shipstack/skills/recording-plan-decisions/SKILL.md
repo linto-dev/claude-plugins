@@ -11,6 +11,7 @@ hooks:
         - type: command
           command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" decisions'
           timeout: 30
+          onFailure: block
 ---
 
 # 決定と学びを記録する

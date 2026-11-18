@@ -3,8 +3,10 @@
 #
 # 使い方: guard.sh <implement|decisions|finalize|merge-main>（標準入力に PreToolUse の JSON）
 #
-# python3 が無いと guard.py が動かず、フックの失敗は Claude Code では止めない扱い（素通り）になる。
-# そのときは git・gh・wrangler だけを止めて知らせる（ほかのコマンドまで止めると、何もできなくなるため）。
+# フックは onFailure: block で登録する。guard.py が想定外の例外で落ちたとき（終了コード 1）や時間切れのときは、
+# Claude Code がコマンドを止める（既定の、失敗したフックはコマンドを通す扱いにしない）。
+# python3 が無いと guard.py が動かず、そのままではどの Bash も止まる。そのときは git・gh・wrangler だけを止めて
+# 知らせ、ほかのコマンドは通す（すべて止めると、何もできなくなるため）。
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 input="$(cat)"

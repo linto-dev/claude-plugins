@@ -11,6 +11,7 @@ hooks:
         - type: command
           command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" merge-main'
           timeout: 30
+          onFailure: block
 ---
 
 # main を機能ブランチに取り込む
