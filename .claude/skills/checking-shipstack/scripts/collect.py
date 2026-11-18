@@ -8,11 +8,10 @@
 状態は Cloudflare R2 のバケット（contracts.json の store）に、日時ごとの写しとして置く:
   runs/<UTC の日時>/pages/<ページ>.md   見ている文書の写し
   runs/<UTC の日時>/state.json          見た版と、ページごとのハッシュ（最後に書く。これがある写しだけを使う）
-上書きはしない（R2 にはバージョニングが無い）。90 日を過ぎた写しはバケットのライフサイクルの規則が消すので、
-変化が無くても 30 日ごとに写しを書き直す。
+上書きはしない（R2 にはバージョニングが無い）。90 日を過ぎた写しはバケットのライフサイクルの規則が消すので、変化が無くても 30 日ごとに写しを書き直す。
 
-R2 には S3 互換の API で、このバケットだけに絞ったトークン（Object Read & Write）で読み書きする。署名（SigV4）は
-ここで作り、送るのは curl に任せる（クラウドの会話のプロキシの設定をそのまま使う）。鍵は環境変数から読む:
+R2 には S3 互換の API で、このバケットだけに絞ったトークン（Object Read & Write）で読み書きする。署名（SigV4）はここで作り、送るのは curl に任せる（クラウドの会話のプロキシの設定をそのまま使う）。
+鍵は環境変数から読む:
   SHIPSTACK_CHECK_R2_ENDPOINT           https://<アカウントの ID>.r2.cloudflarestorage.com
   SHIPSTACK_CHECK_R2_ACCESS_KEY_ID
   SHIPSTACK_CHECK_R2_SECRET_ACCESS_KEY
