@@ -2,9 +2,8 @@
 
 使い方（リポジトリのルートで）: python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
 
-使い捨てのリポジトリ（origin の代わりの bare リポジトリ、main、計画の README と計画書）を毎回作って、guard.py と
-shipstack の決定論的なふるまいを確かめる。GitHub と Claude には出ない。gh と claude は tests/fakes/ の偽物に
-差し替え、指揮役（shipstack run）を最後まで回す。
+使い捨てのリポジトリ（origin の代わりの bare リポジトリ、main、計画の README と計画書）を毎回作って、guard.py と shipstack の決定論的なふるまいを確かめる。
+GitHub と Claude には出ない。gh と claude は tests/fakes/ の偽物に差し替え、指揮役（shipstack run）を最後まで回す。
 """
 
 from __future__ import annotations

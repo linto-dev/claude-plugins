@@ -3,25 +3,25 @@
 
 判断の要らない操作を、文章の指示ではなくここで行う。どのサブコマンドも同じ入力なら同じ結果を出す。
 
-  run             指揮役。次に行うことを決め、ワーカーを claude -p で 1 つずつ動かし、確かめてから次へ進む。途中で切れたワーカーは、同じ会話を続きから再開する
-  next            次に行うことを決める（何も変えない）
-  verify          ワーカーの後に、コミット・PR の進捗・手元を確かめる（CI を待つのは仕上げの後だけ）
-  values          計画の README の「プロンプトに入れる値」の表を読む
+  run                指揮役。次に行うことを決め、ワーカーを claude -p で 1 つずつ動かし、確かめてから次へ進む。途中で切れたワーカーは、同じ会話を続きから再開する
+  next               次に行うことを決める（何も変えない）
+  verify             ワーカーの後に、コミット・PR の進捗・手元を確かめる（CI を待つのは仕上げの後だけ）
+  values             計画の README の「プロンプトに入れる値」の表を読む
   check-requirements 要件定義書（requirements.md）が、計画のスキルと点検の読む形になっているかを確かめる
-  check-plan      計画の README と計画書が、スキルと指揮役の読む形になっているかを確かめる
-  preflight       手元のチェックアウトを確かめる（ブランチ、origin との差、未コミットの変更、済んだフェーズ）
-  pr-create       機能の PR が無ければ、README の「機能の PR の本文」と「PR のタイトル」で WIP: 付きで作る
-  pr-check-off    機能の PR の本文の進捗で、目印を含むチェックボックスの行を 1 行だけ [x] にする
-  pr-body         仕上げた機能の PR の本文の下書きを出す（README・計画書・コミット・結果ファイルから写す）
-  pr-finalize     仕上げた本文を確かめ、タイトルの WIP: を外して PR に書く
-  ci              機能の PR の CI が終わるまで待ち、pass・fail・pending・none のどれかを返す
-  previous        フェーズのワーカーが push の前に、前の push の CI を待ち、1 つ前のフェーズの「push の後の確認」を出す
-  result          ワーカーの結果ファイル（.runs/<名前>.json）を書く
-  stops           うまくいかなかったワーカーの記録（.runs/history.jsonl）を集める
-  session         要件定義と計画のスキルが、自分の会話の ID を .runs/sessions.jsonl に書く
-  usage           計画の会話ごとの時間・モデル・エフォート・トークンを集め（.runs/usage/ に写す）、手順ごとに出す
-  commit-skeleton コミットメッセージの下書きを出す（フェーズと手順を見分ける行は、ここで書く）
-  commit-check    コミットメッセージが決まりどおりかを確かめる
+  check-plan         計画の README と計画書が、スキルと指揮役の読む形になっているかを確かめる
+  preflight          手元のチェックアウトを確かめる（ブランチ、origin との差、未コミットの変更、済んだフェーズ）
+  pr-create          機能の PR が無ければ、README の「機能の PR の本文」と「PR のタイトル」で WIP: 付きで作る
+  pr-check-off       機能の PR の本文の進捗で、目印を含むチェックボックスの行を 1 行だけ [x] にする
+  pr-body            仕上げた機能の PR の本文の下書きを出す（README・計画書・コミット・結果ファイルから写す）
+  pr-finalize        仕上げた本文を確かめ、タイトルの WIP: を外して PR に書く
+  ci                 機能の PR の CI が終わるまで待ち、pass・fail・pending・none のどれかを返す
+  previous           フェーズのワーカーが push の前に、前の push の CI を待ち、1 つ前のフェーズの「push の後の確認」を出す
+  result             ワーカーの結果ファイル（.runs/<名前>.json）を書く
+  stops              うまくいかなかったワーカーの記録（.runs/history.jsonl）を集める
+  session            要件定義と計画のスキルが、自分の会話の ID を .runs/sessions.jsonl に書く
+  usage              計画の会話ごとの時間・モデル・エフォート・トークンを集め（.runs/usage/ に写す）、手順ごとに出す
+  commit-skeleton    コミットメッセージの下書きを出す（フェーズと手順を見分ける行は、ここで書く）
+  commit-check       コミットメッセージが決まりどおりかを確かめる
 
 run と usage（--json なし）は人が読む文を出す。commit-skeleton と pr-body は下書きの文を出す。ほかは結果を 1 つの JSON で出す。
 終了コードは 0 成功／1 確かめた結果が合わない・止まった・失敗／2 使い方の誤り。

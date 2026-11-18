@@ -19,6 +19,8 @@ jobs:
           python-version: "3.12"
       - name: 共通のスクリプトの試験
         run: python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
+      - name: ハーネスの追従のスクリプトの試験
+        run: python3 -I -B -m unittest discover -s .claude/skills/harness-watch/tests -v
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

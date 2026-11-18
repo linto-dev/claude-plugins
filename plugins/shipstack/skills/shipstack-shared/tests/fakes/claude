@@ -7,8 +7,7 @@ FAKE_CLAUDE_DENY にコマンドを入れると、そのコマンドが権限で
 FAKE_CLAUDE_CRASH に「名前:回数」を入れると、そのワーカーは最初のその回数だけ、手元を変えたところで API の失敗で終わる。
 FAKE_CLAUDE_HANG にワーカーの名前を入れると、そのワーカーは最初の 1 回だけ、手元を変えたところで <ログ>.hang を作って止まったままになる。
 FAKE_CLAUDE_RETRY に回数を入れると、始めにその回数だけ API の再試行の記録を流す。
-FAKE_CLAUDE_TRANSCRIPTS があれば、本物と同じ場所（$CLAUDE_CONFIG_DIR/projects/<作業フォルダ>/<会話の ID>.jsonl）に、
-起動 1 回につき発言 1 件（入力 1,000・出力 100 トークン、エフォート xhigh）の会話の記録を書き足す。
+FAKE_CLAUDE_TRANSCRIPTS があれば、本物と同じ場所（$CLAUDE_CONFIG_DIR/projects/<作業フォルダ>/<会話の ID>.jsonl）に、起動 1 回につき発言 1 件（入力 1,000・出力 100 トークン、エフォート xhigh）の会話の記録を書き足す。
 --resume で起動されたら、再開のプロンプトに引いた最初の指示（「/<スキル> <対象>」）のワーカーとして続ける。
 """
 
