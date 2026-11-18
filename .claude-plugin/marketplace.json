@@ -7,8 +7,8 @@
   },
   "plugins": [
     {
-      "name": "plan-phases",
-      "source": "./plugins/plan-phases",
+      "name": "shipstack",
+      "source": "./plugins/shipstack",
       "description": "要件定義から計画、フェーズごとの実装、PR の仕上げまでを、人に聞かないワーカーで進める開発フロー（Cloudflare と TypeScript のモノレポ向け）"
     }
   ]
