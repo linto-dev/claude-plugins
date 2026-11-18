@@ -23,7 +23,7 @@ rebase すると push 済みの機能ブランチの履歴を書き換えるこ�
 
 ## 守ること
 
-決まりに反する git と gh の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。止まるのは、衝突の直し方が計画書の「変えてはいけないこと」と食い違うとき、main の変更でまだ終わっていないフェーズの目的が果たせなくなったとき、同じ問題で 2 回直して失敗したときだけ。止まるときは手順 6 の結果ファイルを `--status stopped` で書いて終える
 - git の操作は、`{{機能ブランチ}}` への `origin/main` の merge、コミット、push に限る

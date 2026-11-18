@@ -23,7 +23,7 @@ hooks:
 
 ## 守ること
 
-決まりに反する git と gh の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。止まるのは次のときだけ（手順 6 の結果ファイルを `--status stopped` で書いて終える）
   - 満たさない条件を直すのに、計画の README や計画書の「変えてはいけないこと」「対象外」に触れる変更が要る

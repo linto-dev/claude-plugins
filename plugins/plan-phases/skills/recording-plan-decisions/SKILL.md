@@ -29,7 +29,7 @@ ADR にするかどうかは、ここで初めて決める。書く条件の「�
 
 ## 守ること
 
-決まりに反する git と gh の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`plan-phases-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。止まるのは、既存の ADR と食い違う決定があり、置き換えるか機能の側を直すかを材料から決められないときだけ（手順 8 の結果ファイルを `--status stopped` で書いて終える）
 - git と gh の操作は、`{{機能ブランチ}}` へのコミットと push、機能の PR の本文の更新に限る。main への直接のコミットと push、ブランチの作成、PR の作成とマージ、force push、タグ、履歴の書き換え（rebase、`reset --hard`、push 済みのコミットの amend）はしない

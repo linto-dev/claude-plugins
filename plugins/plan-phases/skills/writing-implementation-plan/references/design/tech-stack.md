@@ -20,7 +20,7 @@
 - 汎用の小さな道具（日付・配列・文字列）は足さず、自前で書く。特定の用途の部品（例: PDF）は、既存の依存・自前の部品と重ならないときだけ足す
 - 足す前に npm で今の版、保守の状況、既知の脆弱性を確かめ、修正済みの正式版を入れる。ベータ・RC と、出て 1〜2 か月の major は入れない。npm の `latest` がベータのことがあるので版を指定する
 - 外部の依存は pnpm の catalog に集め、同じ系列は同じ版にそろえる。better-auth・alchemy・e2e はキャレット無しで固定する
-- Cloudflare のベータの機能は、この文書が決めたものだけにし、止まっても業務が止まらない形にする
+- Cloudflare のベータの機能は、この文書が決めたものだけにし、止まっても業務が止まらない形にする。例外は秘密の値の Secrets Store で、止まると秘密の値を読めず業務も止まることを受け入れる
 
 ## 実行基盤
 
@@ -104,18 +104,22 @@ SQL とマイグレーション
 - 使う: Email Service（認証メールと通知。送信の部分を差し替えられる形にする）、Turnstile（公開のフォームとログイン）、Images、Browser Run（帳票の PDF）
 - Rate Limiting バインディングは近似値。厳密に止めるなら DO か WAF にする
 - AI の呼び出しは AI Gateway を通し、本番で本文を記録しない
-- Secrets Store、Flagship、Containers、K2 は既定では使わない
+- 秘密の値は Secrets Store に置く（ベータ。1 つのアカウントにストアは 1 つで、件数の上限を同じアカウントのほかのアプリと分け合う）。置き方と読み方はセキュリティとコード
+- Flagship、Containers、K2 は既定では使わない
 
 ## インフラのコード化
 
 - 既定は alchemy（`packages/infra/alchemy.run.ts`、stage は `dev`・`pr-<n>`・`prod`）。Worker が 1 つ、PR ごとの環境が要らない、運用をほかの人やチームに引き継ぐ、のどれかなら wrangler.jsonc だけにする
 - 本番の D1 と R2 は `delete: false` にし、prod は CI からだけデプロイする
+- 秘密の値は Secrets Store の名前だけで bind し（alchemy 0.x は `SecretRef`）、値を IaC の state と CI に渡さない。デプロイの最初に、bind する秘密の値が Secrets Store にそろっているかを確かめ、無ければどの resource にも触る前に止める
+- binding から外した平文の secret（`secret_text`）は Worker に残る（Cloudflare はアップロードに無い secret を消さない）。外したら `wrangler secret delete` で消す
 - Worker Previews では Workflow を共有し、Queue を consume できず、Cron と Service Binding が本番を向く
 
 ## CI/CD と検査
 
 - GitHub Actions。アクションは commit SHA で固定し、`permissions: { contents: read }` にし、`pull_request_target` を使わない
-- Cloudflare のトークンは用途ごとに分け、Cloudflare のアカウントをプロダクト（受託なら依頼主）ごとに分ける
+- Cloudflare のトークンは用途ごとに分け、Cloudflare のアカウントをプロダクト（受託なら依頼主）ごとに分ける。デプロイのトークンには、Worker に Secrets Store を bind するために「Account Secrets Store: Edit」が要る
+- GitHub の Secrets に置くのは CI 自身が使うもの（デプロイのトークン、IaC の state の鍵）だけにする。アプリの秘密の値と、秘密でない設定（URL、ID）は置かない（設定は IaC に書く）
 - 検査は Biome（`biome ci`）、Knip、dependency-cruiser（層と境界）、`tsc`。規則を緩めない。dependency-cruiser に規則を足したら、違反を置いて発火を確かめる
 - TypeScript は、型検査にネイティブ版を、ツール用に前の major を並べる（dependency-cruiser が対応するまで）
 - Turborepo と pnpm。内部パッケージはビルドせず、`exports` で `src/*.ts` を指す。pnpm の設定は `pnpm-workspace.yaml` に書き、`minimumReleaseAge` を明示する
@@ -150,12 +154,13 @@ SQL とマイグレーション
 - alchemy・Hono・oRPC の次の major が正式版になった（oRPC は通信形式が変わる）
 - dependency-cruiser が TypeScript の新しい major に、Dependabot が pnpm の新しい major に対応した
 - D1 の読み取りの複製、Email Service の送信が GA になった
+- Secrets Store が GA になった（ベータの例外を外す）。件数の上限に近づいた
 
 ## 計画に書くこと
 
 - README の「決めたこと」: 依存を足すたびに 1 行書く（比べた案に「自前で書く」と既存の依存を入れ、技術と業務の理由を書く）
 - README の「決めたこと」: 既定値から外れる選択は「既定値から外れる」と書き、外れた前提と比べた既定値を書く（ADR の候補。ADR にするかは決定と学びの記録が決める）
-- README の「開始前に人がすること」: Cloudflare のアカウントとトークン、秘密の値、メールの DNS、Access のポリシー
+- README の「開始前に人がすること」: Cloudflare のアカウントとトークン、秘密の値（Secrets Store への登録）、メールの DNS、Access のポリシー
 - 「前提」: npm で確かめた版、公式のドキュメントで確かめた上限の値と URL
 - 「変更するファイル」: `package.json`・catalog・lockfile、IaC の定義、`run_worker_first`
 - 「約束」: バインディングの名前
