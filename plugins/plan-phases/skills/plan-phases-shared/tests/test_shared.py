@@ -386,6 +386,38 @@ class GuardTest(Fixture):
                 with self.subTest(role=role, command=command):
                     self.assertDenied(role, command)
 
+    def test_secret_writes_are_denied_for_every_worker(self):
+        # 秘密の値の登録と入れ替えは人がする。GitHub の secret・variable と、Worker の secret・Secrets Store の書き込みを止める。
+        for command in [
+            "gh secret set API_KEY",
+            "gh variable delete APP_URL",
+            "wrangler secret put API_KEY",
+            "openssl rand -base64 32 | npx wrangler secret put SIGNING_KEY",
+            "npx wrangler secret delete API_KEY --name api",
+            "pnpm -F @app/api exec wrangler secret bulk secrets.json",
+            "pnpm exec wrangler versions secret put API_KEY",
+            "npx --yes wrangler@4 secrets-store secret create store1 --name app-prod_API_KEY --scopes workers --remote",
+            "wrangler --profile prod secrets-store secret update store1 --secret-id abc --value x",
+            "npx wrangler secrets-store secret delete store1 --secret-id abc --remote",
+            "npx wrangler secrets-store store create default --remote",
+            "npx wrangler deploy --secrets-file .env.production",
+        ]:
+            for role in ("implement", "decisions", "finalize", "merge-main"):
+                with self.subTest(role=role, command=command):
+                    self.assertDenied(role, command)
+
+    def test_secret_reads_and_other_wrangler_commands_are_allowed(self):
+        for command in [
+            "npx wrangler secret list --name api",
+            "npx wrangler secrets-store secret list store1 --remote --per-page 100",
+            "npx wrangler versions view 1234 --name api --json",
+            "pnpm wrangler types",
+            "pnpm add -D wrangler",
+            "echo 'wrangler secret put X' > notes.txt",
+        ]:
+            with self.subTest(command=command):
+                self.assertAllowed("implement", command)
+
     def test_commit_on_main_is_denied(self):
         sh("git", "switch", "-q", "main", cwd=self.repo)
         self.assertDenied("implement", "git commit -m 'feat: x'")

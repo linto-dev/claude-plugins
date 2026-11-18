@@ -10,7 +10,7 @@
 | --- | --- |
 | `scripts/plan-phases` | 指揮役と、決定論的な操作のサブコマンド（下の表） |
 | `scripts/guard.py` | 各スキルの「守ること」を止める PreToolUse フック |
-| `scripts/guard.sh` | フックの入口。python3 が無いときは git と gh だけを止める |
+| `scripts/guard.sh` | フックの入口。python3 が無いときは git・gh・wrangler だけを止める |
 | `tests/test_shared.py` | 試験。`tests/fakes/` の偽の `gh` と `claude` で、指揮役を最後まで回す |
 
 ## 指揮役（plan-phases run）
@@ -164,7 +164,7 @@
 
 | 役目 | 使うスキル | 止めるもの（全員に共通のものに加えて） |
 | --- | --- | --- |
-| すべて | — | force push、main への push とコミット、origin に無いブランチの push、ブランチやタグを消す・送る push、push 済みのコミットの amend と reset、`reset --hard`、rebase、pull、ブランチとタグの作成と削除、worktree の作成と削除、`git clean -f`、`gh pr merge`・`close`、PR の向き先の変更、書き込む `gh api`、`gh workflow run` |
+| すべて | — | force push、main への push とコミット、origin に無いブランチの push、ブランチやタグを消す・送る push、push 済みのコミットの amend と reset、`reset --hard`、rebase、pull、ブランチとタグの作成と削除、worktree の作成と削除、`git clean -f`、`gh pr merge`・`close`、PR の向き先の変更、書き込む `gh api`、`gh workflow run`、秘密の値の書き込み（`gh secret`・`gh variable` の set と delete、wrangler の `secret put`・`delete`・`bulk`、`versions secret`、`secrets-store` の作成・更新・削除、`--secrets-file`） |
 | `implement` | implementing-plan-phase | merge |
 | `merge-main` | merging-main-into-feature | `origin/<既定のブランチ>` 以外の merge、PR の作成 |
 | `decisions` | recording-plan-decisions | merge、PR の作成 |

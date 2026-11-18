@@ -31,6 +31,13 @@ SEPARATOR = re.compile(r"[;&|()]+")
 # shlex が切り出すリダイレクトの記号（>、>>、<、>&、&>、&>>）。
 REDIRECT = re.compile(r"[<>]+&?|&>>?")
 WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "env", "sudo"}
+# パッケージのコマンドを動かす前置き（npx wrangler、pnpm exec wrangler、pnpm dlx wrangler@4 など）。
+RUNNERS = {"npx", "pnpx", "pnpm", "yarn", "bunx", "bun"}
+WRANGLER = re.compile(r"wrangler(@[\w.^~-]+)?")
+# wrangler の、値を取るオプション（positionals で値をサブコマンドと取り違えないため）。
+WRANGLER_VALUE_FLAGS = {"--name", "--env", "-e", "--config", "-c", "--cwd", "--profile", "--scopes", "--comment",
+                        "--value", "--secret-id", "--page", "--per-page", "--persist-to", "--env-file",
+                        "--secrets-file"}
 
 
 def deny(message: str) -> None:
@@ -353,14 +360,45 @@ def check_gh(args: list[str], role: str) -> None:
         deny(f"gh {group} {action} はしません")
 
 
+# ---------------------------------------------------------------- wrangler
+
+
+def wrangler_args(argv: list[str]) -> list[str] | None:
+    """wrangler の呼び出しなら、wrangler の後ろの引数。そうでなければ None。"""
+    if WRANGLER.fullmatch(os.path.basename(argv[0])):
+        return argv[1:]
+    if os.path.basename(argv[0]) in RUNNERS:
+        for i, word in enumerate(argv[1:], start=1):
+            if WRANGLER.fullmatch(os.path.basename(word)):
+                return argv[i + 1:]
+    return None
+
+
+def check_wrangler(args: list[str]) -> None:
+    """秘密の値を書く操作を止める。登録と入れ替えは人がする（計画の「開始前に人がすること」）。"""
+    words = positionals(args, WRANGLER_VALUE_FLAGS)
+    message = ("秘密の値は書きません（Worker の secret と Secrets Store の作成・更新・削除）。"
+               "登録は人がするので、計画の「開始前に人がすること」に書きます")
+    if words[:1] == ["secret"] and words[1:2] in (["put"], ["delete"], ["bulk"]):
+        deny(message)
+    if words[:2] == ["versions", "secret"] and words[2:3] in (["put"], ["delete"], ["bulk"]):
+        deny(message)
+    if words[:2] == ["secrets-store", "secret"] and words[2:3] in (["create"], ["update"], ["delete"], ["duplicate"]):
+        deny(message)
+    if words[:2] == ["secrets-store", "store"] and words[2:3] in (["create"], ["delete"]):
+        deny(message)
+    if words[:1] in (["deploy"], ["versions"]) and has(args, "--secrets-file"):
+        deny(message)
+
+
 # ---------------------------------------------------------------- 入口
 
 
 def check_bash(command: str, role: str, cwd: str) -> None:
     parsed = segments(command)
     if parsed is None:
-        if re.search(r"(^|[\s;&|(])(git|gh)\s", command):
-            deny("コマンドを読めませんでした（引用符の対応など）。git と gh は、1 つずつ単純な形で実行します")
+        if re.search(r"(^|[\s;&|(])(git|gh|wrangler(@\S*)?)\s", command):
+            deny("コマンドを読めませんでした（引用符の対応など）。git・gh・wrangler は、1 つずつ単純な形で実行します")
         return
     for argv in parsed:
         argv = program(argv)
@@ -373,6 +411,10 @@ def check_bash(command: str, role: str, cwd: str) -> None:
             check_git(argv[1:], role, cwd)
         elif name == "gh":
             check_gh(argv[1:], role)
+        else:
+            wrangler = wrangler_args(argv)
+            if wrangler is not None:
+                check_wrangler(wrangler)
 
 
 def main() -> int:

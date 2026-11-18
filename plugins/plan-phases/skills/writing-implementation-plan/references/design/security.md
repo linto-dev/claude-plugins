@@ -122,10 +122,11 @@
 
 ## 秘密の値
 
-- Workers の secret に置き、人が見ない形で作る（例: `openssl rand -base64 32 | wrangler secret put <名前>`）。値を会話にも計画にも出さず、登録は人がする。
+- Cloudflare の Secrets Store に `<アプリ>-<stage>_<名前>` で置き（scope は Workers）、Worker には名前だけで bind する。値は Cloudflare にだけ置き、GitHub の Secrets、IaC の state、会話、計画に出さない。登録は人がする。
+- 乱数の鍵は人が見ない形で作る（例: `wrangler secrets-store secret create <ストアの ID> --name <名前> --scopes workers --remote --value "$(openssl rand -base64 32)"`。履歴に残るのは式だけ）。外部サービスの資格情報はダッシュボードか対話の入力で登録する。
 - `docs/security.md` に一覧（名前、用途、入れ替えの手順、最後に入れ替えた日）を置く。
-- プレビューにはプレビュー専用の値だけを渡す（CI で本番の名前の参照を検査）。
-- 入れ替えでは重なりの期間に新旧の両方を受け、最後に古い値で 401 になることを確かめる。
+- プレビューには本番の秘密の値を bind しない。ダミーの平文の secret かプレビュー専用の名前を渡す（CI で本番の名前の参照を検査）。
+- Secrets Store の値を替えると、デプロイなしで Worker に効く。入れ替えでは、Worker が値を覚えている時間を含めて重なりの期間を取り、新旧の両方を受け、最後に古い値で 401 になることを確かめる。
 - 依頼主や利用者から預かった外部サービスの資格情報を D1 に置くなら AES-256-GCM で暗号化し、追加の認証データに `組織|行|用途` を入れ、`kek_version` の列を持つ。
 
 ## AI の機能と MCP
