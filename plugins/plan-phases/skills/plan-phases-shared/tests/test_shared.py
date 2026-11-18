@@ -39,10 +39,10 @@ README = """# demo
 
 ## フェーズ表
 
-| フェーズ | 作業名 | 要約 |
-| --- | --- | --- |
-| フェーズ 1 | `demo-p1` | 名前 |
-| フェーズ 2 | `demo-p2` | 言語 |
+| フェーズ | 作業名 | エフォート | 要約 |
+| --- | --- | --- | --- |
+| フェーズ 1 | `demo-p1` | medium | 名前 |
+| フェーズ 2 | `demo-p2` | `high` | 言語 |
 
 ## 開始前に人がすること
 
@@ -970,6 +970,40 @@ class RunTest(Fixture):
                          [("demo-p1", True), ("demo-p2", True), ("demo-decisions", True), ("demo-finalize", False)])
         self.assertEqual(json.loads((self.plan / ".runs" / "demo-p2.json").read_text())["previous_ci"], "fail")
 
+    def test_efforts_are_passed_to_workers(self):
+        """フェーズはフェーズ表の「エフォート」、ほかの手順は決まった値を --effort で渡し、記録に残す。"""
+        proc = self.run_plan(env={"FAKE_CLAUDE_CRASH": "demo-p2:1", "PLAN_PHASES_RESUME_PAUSE": "0"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("▶ demo-p1（implementing-plan-phase、エフォート medium）を始めます", proc.stdout)
+        efforts = [(c["prompt"].split()[0].split(":")[-1] if not c["prompt"].startswith("（") else "再開",
+                    c["argv"][c["argv"].index("--effort") + 1]) for c in self.worker_calls()]
+        # 途中で切れて再開した会話にも、同じエフォートを渡す
+        self.assertEqual(efforts, [("implementing-plan-phase", "medium"), ("implementing-plan-phase", "high"), ("再開", "high"),
+                                   ("recording-plan-decisions", "medium"), ("finalizing-feature-pr", "medium")])
+        self.assertEqual([(h["name"], h["effort"]) for h in self.history() if h["ok"]],
+                         [("demo-p1", "medium"), ("demo-p2", "high"), ("demo-decisions", "medium"), ("demo-finalize", "medium")])
+
+    def test_effort_environment_variable_wins(self):
+        """CLAUDE_CODE_EFFORT_LEVEL は --effort より強いので、付いていればそう知らせ、その値を記録する。"""
+        proc = self.run_plan("--once", env={"CLAUDE_CODE_EFFORT_LEVEL": "xhigh"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("CLAUDE_CODE_EFFORT_LEVEL（xhigh）が付いているので", proc.stdout)
+        self.assertIn("エフォート xhigh）を始めます", proc.stdout)
+        self.assertEqual(self.history()[0]["effort"], "xhigh")
+
+    def test_a_plan_without_the_effort_column_runs_phases_at_high(self):
+        """エフォートの列の無い前の版の計画も動き、フェーズは high で動く。"""
+        readme = self.plan / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        for old, new in (("| エフォート |", "|"), ("| --- | --- | --- | --- |", "| --- | --- | --- |"), (" medium |", ""), (" `high` |", "")):
+            text = text.replace(old, new, 1)
+        readme.write_text(text, encoding="utf-8")
+        self.run_plan("--once")
+        dry = self.run_plan("--dry-run")
+        self.assertIn("次: demo-p2（implementing-plan-phase、エフォート high）", dry.stdout)
+        self.assertIn("--effort high", dry.stdout)
+        self.assertEqual(self.history()[0]["effort"], "high")
+
 
 class UsageTest(Fixture):
     """時間・モデル・エフォート・トークンを、会話の記録から集めて写す（usage）。"""
@@ -1113,6 +1147,8 @@ class CheckPlanTest(Fixture):
             (lambda: self.edit("README.md", "- 右から左に書く言語", "- [ ] 右から左に書く言語"), "チェックボックスは「進捗」だけ"),
             (lambda: self.edit("README.md", "まだマージしない", "マージ待ち"), "先頭の注意に「まだマージしない」がありません"),
             (lambda: self.edit("README.md", "`feat(greet): あいさつ", "`あいさつ"), "Conventional Commits"),
+            (lambda: self.edit("README.md", "| medium |", "| 普通 |"), "demo-p1 の「エフォート」は low・medium・high・xhigh・max"),
+            (lambda: self.edit("README.md", "| `high` |", "| |"), "demo-p2 の「エフォート」は"),
         ]
         for i, (broken, expected) in enumerate(cases):
             with self.subTest(expected=expected):
@@ -1134,6 +1170,7 @@ class CheckPlanTest(Fixture):
         self.edit("phase-01.md", "- `app1.ts`", "- `app1.ts`（{{目的}}のため、適切に分ける）")
         self.edit("phase-02.md", "- [ ] `node --test` が緑", "- [ ] プレビュー環境で出力が出る")
         self.edit("README.md", "| `{{E2E}}` | なし（E2E が無い） |\n", "")
+        self.edit("README.md", "| medium |", "| xhigh |")
         self.edit("README.md", "- 本番で `node app.ts` を動かす", "- 本番で `node app.ts` を動かす\n- E2E を流して記録をコミットする（マージの前に人が行う）")
         code, out = self.check()
         self.assertEqual(code, 0, out)
@@ -1142,7 +1179,8 @@ class CheckPlanTest(Fixture):
                          "Claude がコマンドやブラウザでできる作業", "「許可するコマンドのルール」がありません",
                          "phase-01.md:24: 実装が一意にならない言葉「適切に」", "phase-01.md:24: 値の表に無い欄 {{目的}}",
                          "phase-02.md:7: push の後にしか確かめられない条件", "「E2E」の欄がありません",
-                         "「マージの後に行うこと」に、マージの前の作業が入っています"):
+                         "「マージの後に行うこと」に、マージの前の作業が入っています",
+                         "demo-p1 の「エフォート」が xhigh です"):
             self.assertIn(expected, warnings)
         self.assertEqual(out["assumptions"], ["#1 既定は日本語"])
         self.assertNotIn("gh auth login", warnings)  # 資格情報の入力が要る作業は人の作業のまま
@@ -1163,6 +1201,17 @@ class CheckPlanTest(Fixture):
         self.assertEqual(code, 0, out)
         self.assertEqual(out["problems"], [])
         self.assertTrue(any("requirements.md がありません" in w for w in out["warnings"]), out["warnings"])
+
+    def test_a_plan_without_the_effort_column_only_warns(self):
+        """エフォートの列より前に書いた計画も、指揮役で動かせる。"""
+        self.edit("README.md", "| フェーズ | 作業名 | エフォート | 要約 |\n| --- | --- | --- | --- |",
+                  "| フェーズ | 作業名 | 要約 |\n| --- | --- | --- |")
+        self.edit("README.md", "| medium |", "|")
+        self.edit("README.md", "| `high` |", "|")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["warnings"], ["README.md「フェーズ表」: 「エフォート」の列がありません。フェーズのワーカーはすべて high で動きます"
+                                           "（フェーズごとに medium か high を書く）"])
 
 
     def test_value_keys_cover_every_skill(self):

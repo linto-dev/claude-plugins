@@ -72,6 +72,18 @@ Claude Code の会話で次を打ちます。
 
 計画のディレクトリの `.runs/` に、ワーカーの記録と、手順ごとの時間・トークン（`plan-phases usage <計画のディレクトリ>`）が残ります。
 
+## エフォート
+
+Claude Opus 5.5 の公式の推奨（既定の `medium` から始めて明示し、上げるのは差を測った仕事だけ）に沿って、手順ごとに決めています。
+
+| 手順 | エフォート | 決める所 |
+| --- | --- | --- |
+| 要件定義・計画とその点検 | `high` | 各スキルの frontmatter |
+| フェーズ | `medium`（新しいものを足すだけ）か `high`（既存の振る舞いを変える、お金・権限・並行・移行・削除に触れる） | 計画のフェーズ表（計画のスキルが書く）。指揮役が `--effort` で渡す |
+| main の取り込み・決定と学びの記録・仕上げ | `medium` | 指揮役が `--effort` で渡す |
+
+ワーカーへの `--effort` は設定ファイルの `effortLevel`・`modelSettings` より強く、環境変数 `CLAUDE_CODE_EFFORT_LEVEL` より弱いです。根拠と、流し比べ方は [skills/plan-phases-shared/README.md](skills/plan-phases-shared/README.md#エフォート) にあります。
+
 ## 守っていること
 
 - ワーカーは `--permission-mode auto` で動き、決まりのフック（`guard.py`）が force push、main への push、PR のマージ、履歴の書き換えなどを止めます

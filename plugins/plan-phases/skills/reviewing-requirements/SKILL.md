@@ -3,7 +3,7 @@ name: reviewing-requirements
 description: 要件定義書（計画のディレクトリの requirements.md）を、書いた本人ではない立場で、実装計画を書く前に点検する。会話を引き継がないサブエージェントで動き、この文書だけで計画を立てる人として、推測が外れると作るものが変わるところ（決まっていない名前・分岐・上限・権限、確かめられない完了の条件、振る舞いと完了の条件と範囲の食い違い、今のコードや資料との食い違い、抜けた場面、どう作るかへの踏み込み）を、重大と中の指摘にして返す。前回の点検のフォルダも渡されたときは、前回の指摘が直ったかと直した所だけを確かめる。要件定義書もコードも変えない。defining-requirements が書き終えた後に呼ぶほか、「この要件定義を点検して」と計画のディレクトリを渡されたときに使う。
 argument-hint: <計画のディレクトリ> [前回の点検のフォルダ]
 arguments: [plan_dir, previous]
-effort: xhigh
+effort: high
 context: fork
 agent: general-purpose
 background: false

@@ -3,6 +3,7 @@ name: writing-implementation-plan
 description: 要件定義書（計画のディレクトリの requirements.md）から、plan-phases run でそのまま最後まで実装できる実装計画（計画の README とフェーズごとの計画書。後のフェーズや外が頼る約束と、人の判断が要ることだけを決め、細部はワーカーに任せる）を、同じ計画のディレクトリに書く。どう作るか（技術の設計とフェーズの切り方）を決め、確かめられる事実はコードや使い捨てのスクリプトで確かめ、技術の判断と好みと、要件の抜けだけを AskUserQuestion で利用者に聞く。書いた後は plan-phases check-plan で形を確かめ、書いた本人ではない点検（reviewing-implementation-plan）を呼んで指摘を直す。git の操作はしない。要件定義書が無ければ、先に defining-requirements を使うよう伝えて止まる。利用者が計画のディレクトリを渡して呼ぶ。
 argument-hint: <計画のディレクトリ（requirements.md のあるもの）>
 disable-model-invocation: true
+effort: high
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases check-requirements *), Bash(${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases check-plan *), Bash(${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases session *)
 compatibility: Claude Code 向け。python3（3.9 以上）が要る。plan-phases プラグインの一部として入れる（同じプラグインの plan-phases-shared のスクリプトを使う）
 ---
@@ -109,6 +110,7 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。plan-phas
 
 - 機能の PR の本文は要件定義書から写す。「なぜ」は目的から。「機能の完了の条件」には、要件定義書の完了の条件を**同じ文で**すべて写す（マージの前に確かめられないものは「マージの後に行うこと」に同じ文で写す）。計画で足す条件は、その後ろに足す。「対象外」には、要件定義書のやらないことを含める。`check-plan` は、要件定義書の完了の条件が本文に同じ文で無いと problems を出す
 - フェーズは、機能ブランチに積む 1 コミットで閉じる単位にする（大きすぎず小さすぎず）。表の順に 1 つずつ実装する（並列にしない）。前のフェーズに依存するものは後ろに置き、複数のフェーズが使う定数・型は先行するフェーズにまとめる。ADR のためのフェーズと、`docs/domain/` を書くためのフェーズは作らない（決定と学びの記録が書く）
+- フェーズ表の「エフォート」に、フェーズごとに `medium`（新しいものを足すだけ）か `high`（既存の振る舞いを変える、お金・権限・並行・移行・削除に触れる）を書く。基準は [references/plan-format.md](references/plan-format.md) の「フェーズ表」
 - 要件定義書の振る舞いの場面は、どれかのフェーズのテストか完了の条件で確かめる。用語の表の語は、コードの名前の元にする
 - フェーズの計画書は、約束、従う決まり、作り方、テストのケースを書き、コードを読めば分かることと、ワーカーが決められる細部は書かない。後のフェーズが使う名前と形は、それを作るフェーズの「約束」に書き、後のフェーズの計画書は同じ名前で書く
 - 読んだ分野の決まりのうち、各フェーズで守るものを、そのフェーズの計画書の「従う決まり」に写す。CLAUDE.md に既にある決まりは写さない。決まりから外れる設計は、外れる理由を README の「決めたこと」に書く
@@ -153,7 +155,7 @@ ${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases check-plan <計画
 
 次を示して終える。
 
-- 計画のディレクトリと、フェーズ表（作業名と要約）
+- 計画のディレクトリと、フェーズ表（作業名、エフォート、要約）
 - 決めたこと（見立てのものは分けて並べる）と、開始前に人がすること
 - 要件定義書に書き足したこと（要件の抜けとして聞いたもの）
 - `check-plan` の結果（warnings と、それぞれの扱い）

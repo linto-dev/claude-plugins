@@ -3,6 +3,7 @@ name: defining-requirements
 description: 機能の追加や改修の要求（議事録、資料、思いつき）から、実装計画の前に要件定義書（requirements.md）をリポジトリの外の計画のディレクトリに書く。何を、なぜ、どこまで作るか、振る舞い、完了の条件、用語、品質特性、権限とデータを決める。確かめられる事実はコードや資料や使い捨てのスクリプトで確かめ、製品の判断だけを AskUserQuestion で利用者に聞き、決まっていないことが無くなるまで続ける。書いた後は plan-phases check-requirements で形を確かめ、書いた本人ではない点検（reviewing-requirements）を呼んで直す。どう作るかは決めず、writing-implementation-plan に任せる。git の操作はしない。利用者が要求を渡して呼ぶ。
 argument-hint: <要求（何をしたいか。議事録や資料のパスも書ける）>
 disable-model-invocation: true
+effort: high
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases check-requirements *), Bash(${CLAUDE_SKILL_DIR}/../plan-phases-shared/scripts/plan-phases session *)
 compatibility: Claude Code 向け。python3（3.9 以上）が要る。plan-phases プラグインの一部として入れる（同じプラグインの plan-phases-shared のスクリプトを使う）
 ---

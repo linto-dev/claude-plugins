@@ -106,6 +106,16 @@ RESUME_PAUSE_SECONDS = 60
 # 決まりを守らせるフックは、指揮役が --settings で渡す。
 GUARD = Path(os.environ.get("PLAN_PHASES_GUARD") or Path(__file__).resolve().parent / "guard.sh")
 GUARD_ROLES = {"phase": "implement", "merge-main": "merge-main", "decisions": "decisions", "finalize": "finalize"}
+# ワーカーのエフォート。指揮役が --effort で渡す（設定ファイルの modelSettings・effortLevel より強く、
+# CLAUDE_CODE_EFFORT_LEVEL とスキルの frontmatter の effort より弱い）。Opus 5.5 の既定は medium で、公式は「medium から始め、
+# 自分の課題で水準を比べ、xhigh と max は差を測った仕事にだけ使う」とする。medium は範囲のはっきりした新しい機能の実装、
+# high は既存のコードを直すような、検証が要り端が出やすい仕事（2026-11-18 に読んだ）。
+# https://code.claude.com/docs/en/model-config#adjust-effort-level
+# https://platform.claude.com/docs/en/build-with-claude/effort
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+EFFORT_COLUMN = "エフォート"
+# フェーズはフェーズ表の「エフォート」の値。列の無い前の版の計画は high（新しいものを足すだけか、既存を変えるかが分からない）。
+WORKER_EFFORTS = {"phase": "high", "merge-main": "medium", "decisions": "medium", "finalize": "medium"}
 RESUME_PROMPT = """（指揮役より）この会話の前の実行は、途中で切れました（{reason}）。
 手元の未コミットの変更とコミットは、この会話でここまでにした作業です。最初の指示「{prompt}」のスキルの手順を、切れたところから最後（結果ファイルを書いて報告する）まで進めてください。
 - 始める前の確認（plan-phases preflight）はやり直さない（未コミットの変更があるので止まる）
@@ -352,6 +362,19 @@ class Plan:
                         names.append(name)
         return names
 
+    def phase_efforts(self) -> dict[str, str] | None:
+        """フェーズ表の「エフォート」の列（作業名 → 書いた値）。列の無い前の版の計画は None。"""
+        rows = table_rows(find_section(self.lines, "フェーズ表") or [])
+        if not rows or EFFORT_COLUMN not in rows[0]:
+            return None
+        column = rows[0].index(EFFORT_COLUMN)
+        efforts: dict[str, str] = {}
+        for cells in rows[1:]:
+            names = re.findall(rf"(?<![a-z0-9-])({WORK_NAME})(?![a-z0-9-])", " ".join(cells))
+            if names:
+                efforts[names[0]] = (cells[column] if column < len(cells) else "").strip("` ").lower()
+        return efforts
+
     def phase_file(self, name: str) -> Path:
         for path in sorted(self.dir.glob("*.md")):
             if path.name in NOT_PHASE_FILES:
@@ -597,6 +620,23 @@ def check_words(path: Path, lines: list[str], skip: set[int], known: set[str], w
                 warnings.append(f"{path.name}:{i}: 値の表に無い欄 {field} が残っています")
 
 
+def check_efforts(plan: Plan, names: list[str], problems: list[str], warnings: list[str]) -> None:
+    where = "README.md「フェーズ表」"
+    efforts = plan.phase_efforts()
+    if efforts is None:
+        if names:
+            warnings.append(f"{where}: 「{EFFORT_COLUMN}」の列がありません。フェーズのワーカーはすべて {WORKER_EFFORTS['phase']} で動きます"
+                            "（フェーズごとに medium か high を書く）")
+        return
+    for name in names:
+        value = efforts.get(name, "")
+        if value not in EFFORT_LEVELS:
+            problems.append(f"{where}: {name} の「{EFFORT_COLUMN}」は {'・'.join(EFFORT_LEVELS)} のどれかにします（今は「{value}」）")
+        elif value not in ("medium", "high"):
+            warnings.append(f"{where}: {name} の「{EFFORT_COLUMN}」が {value} です。medium か high から始め、外すのは同じフェーズを"
+                            "流し比べて差を確かめたときだけにします（根拠を「決めたこと」に書く）")
+
+
 def check_plan(plan: Plan) -> dict:
     """計画の README と計画書が、スキルと指揮役の読む形になっているか。人の判断の要ることは見ない。"""
     problems: list[str] = []
@@ -622,6 +662,7 @@ def check_plan(plan: Plan) -> dict:
     if names and names != expected:
         problems.append(f"README.md「フェーズ表」: 作業名は上から {expected[0]}、{expected[1] if len(expected) > 1 else '…'} … と"
                         "1 から順に付けます: " + "、".join(names))
+    check_efforts(plan, names, problems, warnings)
 
     files: dict[str, list[Path]] = {}
     for path in sorted(plan.dir.glob("*.md")):
@@ -819,7 +860,22 @@ def worker_step(plan: Plan, kind: str, name: str | None = None) -> dict:
     skill, suffix, target_kind = WORKERS[kind]
     name = name or f"{plan.name}-{suffix}"
     target = str(plan.phase_file(name)) if target_kind == "phase_file" else str(plan.dir)
-    return {"action": "worker", "kind": kind, "name": name, "skill": skill, "prompt": f"{skill_command(skill)} {target}"}
+    return {"action": "worker", "kind": kind, "name": name, "skill": skill, "prompt": f"{skill_command(skill)} {target}",
+            "effort": worker_effort(plan, kind, name)}
+
+
+def worker_effort(plan: Plan, kind: str, name: str) -> str:
+    """指揮役がワーカーに --effort で渡す値。フェーズはフェーズ表の値、ほかは手順ごとに決まった値。"""
+    if kind == "phase":
+        written = (plan.phase_efforts() or {}).get(name)
+        if written in EFFORT_LEVELS:
+            return written
+    return WORKER_EFFORTS[kind]
+
+
+def effort_override() -> str | None:
+    """CLAUDE_CODE_EFFORT_LEVEL は --effort より強い。付いていれば、どのワーカーもその値で動く。"""
+    return (os.environ.get("CLAUDE_CODE_EFFORT_LEVEL") or "").strip() or None
 
 
 def decide(plan: Plan, state: dict) -> dict:
@@ -1766,7 +1822,8 @@ def resume_pause() -> int:
     return int(os.environ.get("PLAN_PHASES_RESUME_PAUSE", RESUME_PAUSE_SECONDS))
 
 
-def claude_command(plan: Plan, kind: str, session_id: str, resume_from: str | None = None) -> list[str]:
+def claude_command(plan: Plan, step: dict, session_id: str, resume_from: str | None = None) -> list[str]:
+    kind = step["kind"]
     cmd = [os.environ.get("PLAN_PHASES_CLAUDE", "claude"), "-p",
            "--output-format", "stream-json", "--verbose",
            "--permission-mode", os.environ.get("PLAN_PHASES_PERMISSION_MODE", "auto"),
@@ -1774,6 +1831,8 @@ def claude_command(plan: Plan, kind: str, session_id: str, resume_from: str | No
     cmd += ["--resume", resume_from] if resume_from else ["--session-id", session_id]
     if os.environ.get("PLAN_PHASES_MODEL"):
         cmd += ["--model", os.environ["PLAN_PHASES_MODEL"]]
+    # 再開した会話にも渡す（--effort はその起動の会話にだけ効く）。
+    cmd += ["--effort", step["effort"]]
     settings: dict = {}
     if plan.allow_rules:
         # 許可ルールに合う操作は分類器を通らずに通る。合わない部分をつなぐと分類器に回る（スキルが単独で実行させる）。
@@ -1796,7 +1855,7 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
         session_id = resume["session_id"]
         transcript = transcript_of(session_id, resume.get("config_dir"))
         account = str(transcript.parents[2]) if transcript else str(config_dir())
-        cmd = claude_command(plan, step["kind"], session_id, str(transcript) if transcript else session_id)
+        cmd = claude_command(plan, step, session_id, str(transcript) if transcript else session_id)
         prompt = RESUME_PROMPT.format(reason=resume.get("reason") or "理由は記録されていません", prompt=step["prompt"])
         resumes = int(resume.get("resumes") or 0) + 1
         started = float(resume["started"])
@@ -1806,12 +1865,13 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
     else:
         session_id = str(uuid.uuid4())
         account = str(config_dir())
-        cmd = claude_command(plan, step["kind"], session_id)
+        cmd = claude_command(plan, step, session_id)
         prompt = step["prompt"]
         resumes = 0
         started = time.time()
         spent_before = 0.0
-        say(f"▶ {step['name']}（{step['skill']}）を始めます。会話: {resume_command(session_id)}")
+        say(f"▶ {step['name']}（{step['skill']}、エフォート {effort_override() or step['effort']}）を始めます。"
+            f"会話: {resume_command(session_id)}")
     # 指揮役ごと止まっても（Ctrl+C、端末を閉じた）、次の run がこの会話を続きから再開できるように、起動の前に書く。
     write_active(plan, {"name": step["name"], "kind": step["kind"], "skill": step["skill"], "session_id": session_id,
                         "config_dir": account, "started": started, "at": now(), "resumes": resumes})
@@ -1947,6 +2007,9 @@ def cmd_run(args) -> int:
             say(f"計画の形の注意が {len(checked['warnings'])} 件あります（plan-phases check-plan で見る）")
         if plan.allow_rules:
             say("ワーカーに渡す許可ルール: " + "、".join(plan.allow_rules))
+        if effort_override():
+            say(f"環境変数 CLAUDE_CODE_EFFORT_LEVEL（{effort_override()}）が付いているので、どのワーカーもフェーズ表と手順ごとの"
+                "エフォートではなく、この値で動きます")
         confirm_prerequisites(plan, args.yes, args.dry_run)
         if not args.dry_run:
             record_usage(plan)  # 要件定義と計画の会話を、記録が消える前に写す
@@ -1996,10 +2059,10 @@ def cmd_run(args) -> int:
                 if active:
                     say(f"次: 途中で切れた {step['name']}（{step['skill']}）の会話を続きから再開")
                     where = transcript_of(active["session_id"], active.get("config_dir"))
-                    print("  " + shlex.join(claude_command(plan, step["kind"], active["session_id"], str(where or active["session_id"]))))
+                    print("  " + shlex.join(claude_command(plan, step, active["session_id"], str(where or active["session_id"]))))
                 else:
-                    say(f"次: {step['name']}（{step['skill']}）")
-                    print("  " + shlex.join(claude_command(plan, step["kind"], "<新しい ID>"))
+                    say(f"次: {step['name']}（{step['skill']}、エフォート {effort_override() or step['effort']}）")
+                    print("  " + shlex.join(claude_command(plan, step, "<新しい ID>"))
                           + f" <<< {json.dumps(step['prompt'], ensure_ascii=False)}")
                 return 0
             if active and read_result(plan, step["name"], float(active["started"])) is not None:
@@ -2013,7 +2076,7 @@ def cmd_run(args) -> int:
                 ensure_checkout(plan, resuming=bool(active))
                 outcome = dispatch(plan, step, root, active)
             entry = {"at": now(), "name": step["name"], "skill": step["skill"], "session_id": outcome["session_id"],
-                     "config_dir": outcome["config_dir"], "resumes": outcome["resumes"],
+                     "effort": effort_override() or step["effort"], "config_dir": outcome["config_dir"], "resumes": outcome["resumes"],
                      "seconds": outcome["seconds"], "cost_usd": outcome["cost_usd"], "api_retries": outcome["api_retries"],
                      "permission_denials": outcome["permission_denials"], "denials": outcome["denials"]}
             if read_result(plan, step["name"], outcome["started"]) is None:

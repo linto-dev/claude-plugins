@@ -3,7 +3,7 @@ name: reviewing-implementation-plan
 description: 実装計画（計画の README とフェーズごとの計画書）を、書いた本人ではない立場で、実装を始める前に点検する。会話を引き継がないサブエージェントで動き、plan-phases check-plan の結果と、要件定義書（requirements.md）とコードを読んで確かめたことをもとに、要件定義書との食い違いと確かめられない要件、約束（後のフェーズや外が頼る名前・形・エラー・文言・表）が一意にならない記述、検証できない完了の条件、計画書どうしやコードとの食い違い、人の判断が要りそうなところのうち、実装の結果が変わるもの（重大と中）を指摘にして返す。前回の点検のフォルダも渡されたときは、前回の指摘が直ったかと直した所だけを確かめる。計画書もコードも変えない。writing-implementation-plan が書き終えた後に呼ぶほか、「この計画を点検して」と計画のディレクトリを渡されたときに使う。
 argument-hint: <計画のディレクトリ> [前回の点検のフォルダ]
 arguments: [plan_dir, previous]
-effort: xhigh
+effort: high
 context: fork
 agent: general-purpose
 background: false
