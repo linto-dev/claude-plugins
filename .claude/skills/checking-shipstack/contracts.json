@@ -6,6 +6,10 @@
     "changelog": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
     "dist_tags": "https://registry.npmjs.org/-/package/@anthropic-ai/claude-code/dist-tags"
   },
+  "store": {
+    "bucket": "shipstack-checks",
+    "prefix": "runs/"
+  },
   "pages": {
     "cc-skills": "https://code.claude.com/docs/en/skills.md",
     "cc-hooks": "https://code.claude.com/docs/en/hooks.md",
@@ -291,11 +295,11 @@
     },
     {
       "id": "cloud-session-github",
-      "claim": "このスキル自身が動くクラウドの会話では、gh pr・gh issue が使えない（GraphQL が拒否される）。PR は gh api の REST で作る。push は claude/ のブランチにする。既定のネットワークで code.claude.com・platform.claude.com・raw.githubusercontent.com・registry.npmjs.org に届く",
+      "claim": "このスキル自身が動くクラウドの会話では、gh pr・gh issue が使えない（GraphQL が拒否される）。PR は gh api の REST で作る。push は claude/ のブランチにする。既定のネットワークで code.claude.com・platform.claude.com・raw.githubusercontent.com・registry.npmjs.org・*.r2.cloudflarestorage.com に届く。ネットワークシークレットは R2 の署名（AWS 以外の SigV4）を作れないので、R2 の鍵は専用の環境の環境変数で渡す",
       "documented": true,
       "pages": ["cc-routines", "cc-cloud-environments"],
-      "keywords": ["GitHub proxy", "GraphQL", "allowlist", "scheduled task", "routine", ["cloud session", "GitHub"], ["cloud session", "gh "]],
-      "used_in": [".claude/skills/harness-watch/SKILL.md", ".claude/hooks/cloud-push-guard.py"],
+      "keywords": ["GitHub proxy", "GraphQL", "allowlist", "scheduled task", "routine", "network secret", "r2.cloudflarestorage", ["cloud session", "GitHub"], ["cloud session", "gh "]],
+      "used_in": [".claude/skills/checking-shipstack/SKILL.md", ".claude/hooks/cloud-push-guard.py"],
       "verify": "文書の cloud-environments の「GitHub proxy」と「Default allowed domains」",
       "verified": "2.1.327（2026-11-18、文書）"
     }

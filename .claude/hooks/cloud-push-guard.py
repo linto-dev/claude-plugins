@@ -28,7 +28,7 @@ PUSH_VALUE_OPTIONS = {"-o", "--push-option", "--receive-pack", "--exec", "--repo
 
 
 def deny(message: str) -> None:
-    print(f"[ハーネスの追従の決まり] {message}", file=sys.stderr)
+    print(f"[shipstack の点検の決まり] {message}", file=sys.stderr)
     sys.exit(2)
 
 
