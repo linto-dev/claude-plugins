@@ -74,6 +74,8 @@ def plugin_name() -> str | None:
 
 
 PLUGIN = plugin_name()
+# プラグインの根。ワーカーに --plugin-dir で渡し、指揮役と同じ版のスキルで動かす。
+PLUGIN_ROOT = Path(__file__).resolve().parents[3] if PLUGIN else None
 
 
 def skill_command(skill: str) -> str:
@@ -106,6 +108,17 @@ RESUME_PAUSE_SECONDS = 60
 # 決まりを守らせるフックは、指揮役が --settings で渡す。
 GUARD = Path(os.environ.get("SHIPSTACK_GUARD") or Path(__file__).resolve().parent / "guard.sh")
 GUARD_ROLES = {"phase": "implement", "merge-main": "merge-main", "decisions": "decisions", "finalize": "finalize"}
+# ワーカーの起動の確かめ。system/init を読んだところ（モデルを呼ぶ前）で行い、合わなければワーカーを止める。
+# - auto mode が使えないと、Claude Code は Manual で始める。--permission-prompts none と組むと、書き込みがすべて拒否されたまま
+#   1 手順を使い切るので、init の permissionMode を確かめる（https://code.claude.com/docs/en/permission-modes ）
+# - プラグインが読み込めないと、/<プラグイン>:<スキル> が展開されない。init の plugins を確かめる
+#   （https://code.claude.com/docs/en/headless#fail-ci-when-a-plugin-or-mcp-server-doesnt-load ）
+# - --bare（公式は将来 -p の既定にすると予告している）や、管理者の設定の disableAllHooks では --settings のフックが動かず、
+#   決まりのフック（guard.sh）が効かない。--settings に SessionStart のフックを置き、init より前に流れるその hook_response で、
+#   フックが動いたことを確かめる（2026-11-18 に 2.1.327 で、--bare では流れないことを確かめた）
+HOOKS_ON = "shipstack-hooks-on"
+# 権限のモードの別名（init の permissionMode は別名を使わない）。
+PERMISSION_MODE_ALIASES = {"manual": "default"}
 # ワーカーのエフォート。指揮役が --effort で渡す（設定ファイルの modelSettings・effortLevel より強く、
 # CLAUDE_CODE_EFFORT_LEVEL とスキルの frontmatter の effort より弱い）。Opus 5.5 の既定は medium で、公式は「medium から始め、
 # 自分の課題で水準を比べ、xhigh と max は差を測った仕事にだけ使う」とする。medium は範囲のはっきりした新しい機能の実装、
@@ -1759,9 +1772,10 @@ def resume_command(session_id: str, config: str | None = None) -> str:
 
 
 def recent_failures(history: list[dict], name: str) -> int:
-    """続けてうまくいかなかった回数。途中で切れただけの記録（interrupted）は、ワーカーの失敗ではないので数えない。"""
+    """続けてうまくいかなかった回数。途中で切れただけの記録（interrupted）と、起動の確かめで止めた記録（launch）は、
+    ワーカーの失敗ではないので数えない。"""
     count = 0
-    for entry in reversed([h for h in history if h.get("name") == name and not h.get("interrupted")]):
+    for entry in reversed([h for h in history if h.get("name") == name and not h.get("interrupted") and not h.get("launch")]):
         if entry.get("ok"):
             break
         count += 1
@@ -1833,6 +1847,10 @@ def claude_command(plan: Plan, step: dict, session_id: str, resume_from: str | N
         cmd += ["--model", os.environ["SHIPSTACK_MODEL"]]
     # 再開した会話にも渡す（--effort はその起動の会話にだけ効く）。
     cmd += ["--effort", step["effort"]]
+    if PLUGIN_ROOT:
+        # 指揮役と guard.sh と同じ版のスキルで動かす。同じ名前のインストール済みのプラグインは、その会話だけ置き換わる
+        # （https://code.claude.com/docs/en/plugins/loading#name-conflicts ）。ワーカーを動かす設定のフォルダに入れなくてよい
+        cmd += ["--plugin-dir", str(PLUGIN_ROOT)]
     settings: dict = {}
     if plan.allow_rules:
         # 許可ルールに合う操作は分類器を通らずに通る。合わない部分をつなぐと分類器に回る（スキルが単独で実行させる）。
@@ -1840,9 +1858,17 @@ def claude_command(plan: Plan, step: dict, session_id: str, resume_from: str | N
     # 再開した会話ではスキルのフックが登録されないので、同じ決まりのフックをここでも渡す（新しい会話では 2 回動くが、結果は同じ）。
     # フックが落ちたり時間切れになったりしたときは、既定ではコマンドが通る。onFailure: block で止める（2.1.295 以上。
     # https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails 。2026-11-18 に 2.1.327 で確かめた）。
-    settings["hooks"] = {"PreToolUse": [{"matcher": "Bash", "hooks": [
-        {"type": "command", "command": f"{shlex.quote(str(GUARD))} {GUARD_ROLES[kind]}", "timeout": 30,
-         "onFailure": "block"}]}]}
+    # SessionStart のフックは起動の確かめに使う（dispatch）。標準エラーに書くので、Claude の文脈には入らない。
+    settings["hooks"] = {
+        "PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": f"{shlex.quote(str(GUARD))} {GUARD_ROLES[kind]}", "timeout": 30,
+             "onFailure": "block"}]}],
+        "SessionStart": [{"hooks": [{"type": "command", "command": f"echo {HOOKS_ON} >&2", "timeout": 10}]}]}
+    # 利用者とリポジトリの設定に左右されないように、ここで決める（コマンドラインの設定は、プロジェクトとユーザーの設定より強い。
+    # https://code.claude.com/docs/en/settings#settings-precedence ）。ultracode が付いていると、ワーカーが手順ごとに
+    # dynamic workflow を組む。disableAllHooks が付いていると、決まりのフックが止まる。
+    settings["ultracode"] = False
+    settings["disableAllHooks"] = False
     cmd += ["--settings", json.dumps(settings, ensure_ascii=False)]
     # --add-dir は値をいくつでも取るので最後に置き、プロンプトは標準入力で渡す。
     return cmd + ["--add-dir", str(plan.dir)]
@@ -1850,6 +1876,24 @@ def claude_command(plan: Plan, step: dict, session_id: str, resume_from: str | N
 
 RETRY_ERRORS = {"rate_limit": "利用上限か流量の制限", "overloaded": "API の混雑", "server_error": "API の失敗",
                 "unknown": "通信の失敗など"}
+
+
+def launch_problems(init: dict, hooks_on: bool) -> list[str]:
+    """ワーカーの system/init と、それより前に流れたフックの記録から、動かしてはいけない理由を返す（無ければ空）。"""
+    problems = []
+    wanted = os.environ.get("SHIPSTACK_PERMISSION_MODE", "auto")
+    mode = init.get("permissionMode")
+    if mode != PERMISSION_MODE_ALIASES.get(wanted, wanted):
+        problems.append(f"ワーカーが {wanted} ではなく {mode} の権限のモードで始まりました。auto mode が使えない（設定の disableAutoMode、"
+                        "auto mode に対応していないモデル、サーバー側で止まっている）と Manual で始まり、書き込みがすべて誰にも聞かずに"
+                        "拒否されます。claude を開いて auto mode に切り替えられるかを確かめます")
+    if PLUGIN and not any(p.get("name") == PLUGIN for p in init.get("plugins") or []):
+        errors = "、".join(f"{e.get('plugin')}: {e.get('message')}" for e in init.get("plugin_errors") or []) or "エラーの記録なし"
+        problems.append(f"ワーカーに {PLUGIN} プラグインが読み込まれませんでした（{errors}）。--plugin-dir {PLUGIN_ROOT} を確かめます")
+    if not hooks_on:
+        problems.append("ワーカーで --settings のフックが動きませんでした。決まりのフック（guard.sh）が効かないので動かしません"
+                        "（--bare か CLAUDE_CODE_SIMPLE で動いた、管理者の設定の disableAllHooks か strictPluginOnlyCustomization、など）")
+    return problems
 
 
 def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> dict:
@@ -1886,6 +1930,8 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
     tool_inputs: dict[str, str] = {}
     denials: list[dict] = []
     retrying: dict = {"since": None, "error": None, "count": 0, "notified": False, "shown": 0}
+    hooks_on = False
+    launch: list[str] = []
     proc = subprocess.Popen(cmd, cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert proc.stdin and proc.stdout
     proc.stdin.write(prompt)
@@ -1895,6 +1941,22 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if event.get("type") == "system" and event.get("subtype") == "hook_response":
+                # SessionStart のフックは init より前に走り終える（https://code.claude.com/docs/en/headless#read-session-metadata ）
+                if event.get("hook_event") == "SessionStart" and HOOKS_ON in (event.get("stderr") or ""):
+                    hooks_on = True
+                continue
+            if event.get("type") == "system" and event.get("subtype") == "init":
+                launch = launch_problems(event, hooks_on)
+                if launch:
+                    proc.terminate()
+                    break
+                loaded = next((p for p in event.get("plugins") or [] if p.get("name") == PLUGIN), None)
+                if PLUGIN_ROOT and loaded and loaded.get("path") and Path(loaded["path"]).resolve() != PLUGIN_ROOT:
+                    # 管理者の設定でプラグインが固定されていると、--plugin-dir は使われない。動きはするが、版が指揮役とずれうる
+                    print(f"    ⚠ ワーカーが読んだ {PLUGIN} は {loaded['path']}（{loaded.get('version')}）で、指揮役の "
+                          f"{PLUGIN_ROOT} と違います", flush=True)
                 continue
             if event.get("type") == "system" and event.get("subtype") == "api_retry":
                 # Claude Code が API の失敗を待って再試行している。待つのは Claude Code に任せ、ここでは知らせるだけにする。
@@ -1948,7 +2010,8 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
             "is_error": bool(final.get("is_error")) or code != 0, "result_text": (final.get("result") or "")[-2000:],
             "cost_total": final.get("total_cost_usd"),
             "cost_usd": None if final.get("total_cost_usd") is None else round(final["total_cost_usd"] - spent_before, 6),
-            "permission_denials": max(len(denials), len(final.get("permission_denials") or [])), "denials": denials}
+            "permission_denials": max(len(denials), len(final.get("permission_denials") or [])), "denials": denials,
+            "launch_problems": launch}
 
 
 def append_history(plan: Plan, entry: dict) -> None:
@@ -2078,6 +2141,23 @@ def cmd_run(args) -> int:
             else:
                 ensure_checkout(plan, resuming=bool(active))
                 outcome = dispatch(plan, step, root, active)
+            if outcome.get("launch_problems"):
+                # 起動の確かめで止めた。モデルを呼ぶ前なので、ワーカーは何もしていない。新しい会話なら捨て、再開しようとした会話なら
+                # active.json を元に戻す（直してから打ち直すと、同じ会話の続きから進む）。ワーカーの失敗としては数えない。
+                if active:
+                    write_active(plan, active)
+                else:
+                    clear_active(plan)
+                append_history(plan, {"at": now(), "name": step["name"], "skill": step["skill"],
+                                      **({"session_id": outcome["session_id"]} if active else {}),
+                                      "effort": effort_override() or step["effort"], "config_dir": outcome["config_dir"],
+                                      "ok": False, "stopped": False, "launch": True, "problems": outcome["launch_problems"]})
+                notify(f"{step['name']} のワーカーを起動の確かめで止めました")
+                say(f"■ {step['name']}（{step['skill']}）のワーカーを、起動の確かめで止めました（モデルを呼ぶ前なので、何もしていません）:")
+                for problem in outcome["launch_problems"]:
+                    print(f"  - {problem}")
+                print(f"  直したら、同じコマンドを打ち直す: shipstack run {plan.dir}")
+                return 1
             entry = {"at": now(), "name": step["name"], "skill": step["skill"], "session_id": outcome["session_id"],
                      "effort": effort_override() or step["effort"], "config_dir": outcome["config_dir"], "resumes": outcome["resumes"],
                      "seconds": outcome["seconds"], "cost_usd": outcome["cost_usd"], "api_retries": outcome["api_retries"],

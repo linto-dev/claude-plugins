@@ -21,7 +21,7 @@
 <プラグインの場所>/skills/shipstack-shared/scripts/shipstack run <計画のディレクトリ> [--dry-run] [--once] [--yes] [--retry] [--fresh]
 ```
 
-ワーカーは `/shipstack:<スキル>` で起動します（プラグインの名前は、このスクリプトから見た `../../../.claude-plugin/plugin.json` から読む）。ワーカーを動かす設定のフォルダ（`CLAUDE_CONFIG_DIR`）で、プラグインを有効にしておきます。
+ワーカーは `/shipstack:<スキル>` で起動します（プラグインの名前は、このスクリプトから見た `../../../.claude-plugin/plugin.json` から読む）。ワーカーには `--plugin-dir` でこのプラグインの根（このスクリプトから見た `../../..`）を渡すので、ワーカーは指揮役と同じ版のスキルで動きます。同じ名前のインストール済みのプラグインは、その会話だけ置き換わり（[公式の説明](https://code.claude.com/docs/en/plugins/loading#name-conflicts)）、ワーカーを動かす設定のフォルダ（`CLAUDE_CONFIG_DIR`）にプラグインを入れていなくても動きます。
 
 1. 計画の形を `check-plan` と同じ規則で確かめる。`problems` があれば、何も起動せずに止まる（`warnings` は件数だけを示す）
 2. 計画の README の「開始前に人がすること」があれば、最初に一度だけ済んだかを聞く（端末で y。`--yes` で済んだものとする。答えは `.runs/prerequisites.json` に残り、項目が変わるまで聞かない）
@@ -29,18 +29,19 @@
    1. git・機能の PR から状態を読み、`next` と同じ規則で次に行うことを 1 つ決める
    2. 機能ブランチが origin に無ければ、`origin/main` から作って push する
    3. 手元を機能ブランチの最新にする（未コミットの変更や、push していないコミットがあれば触らずに止まる。途中で切れたワーカーの続きなら、その変更はそのワーカーのものなので止まらない）
-   4. ワーカーを `claude -p` で起動する（`--permission-mode auto --permission-prompts none`。人に聞く道具は外れる。`--effort` で手順ごとのエフォートを渡す（[下](#エフォート)）。`--settings` で決まりのフック（`guard.sh`）と、計画に「許可するコマンドのルール」があればそれ（[下](#許可するコマンドのルール)）を渡す。環境変数 `CLAUDE_CODE_RETRY_WATCHDOG=1` を付ける（[下](#途中で切れたとき)）。プロンプトの `/<スキル> <対象>` は標準入力で渡す）。ワーカーの発言の 1 行目、権限で拒否された操作、API の再試行を待っていることを流す
-   5. ワーカーが結果ファイルを書かずに終わったら、途中で切れたとみなし、同じ会話を続きから再開する（[下](#途中で切れたとき)）
-   6. `verify` と同じ確かめ（結果ファイル、コミット、PR の進捗、手元）をする。CI を待つのは仕上げの後だけ（[下](#ci-を待たない)）。合わなければ、通知して止まる
+   4. ワーカーを `claude -p` で起動する（`--permission-mode auto --permission-prompts none`。人に聞く道具は外れる。`--plugin-dir` でこのプラグインを読ませる。`--effort` で手順ごとのエフォートを渡す（[下](#エフォート)）。`--settings` で決まりのフック（`guard.sh`）と、起動の確かめのフック、`ultracode` と `disableAllHooks` の値、計画に「許可するコマンドのルール」があればそれ（[下](#許可するコマンドのルール)）を渡す。環境変数 `CLAUDE_CODE_RETRY_WATCHDOG=1` を付ける（[下](#途中で切れたとき)）。プロンプトの `/<スキル> <対象>` は標準入力で渡す）。ワーカーの発言の 1 行目、権限で拒否された操作、API の再試行を待っていることを流す
+   5. ワーカーが思った設定で始まったかを、モデルを呼ぶ前に確かめる。合わなければワーカーを止め、理由を示して止まる（[下](#起動の確かめ)）
+   6. ワーカーが結果ファイルを書かずに終わったら、途中で切れたとみなし、同じ会話を続きから再開する（[下](#途中で切れたとき)）
+   7. `verify` と同じ確かめ（結果ファイル、コミット、PR の進捗、手元）をする。CI を待つのは仕上げの後だけ（[下](#ci-を待たない)）。合わなければ、通知して止まる
 4. 仕上げまで済んだら、仕上げのワーカーが残した「マージの前・後」の手順を示して終える。マージはしない（計画の README に `{{E2E}}` があれば、仕上げのワーカーが最後の push に E2E を流し、変わった記録を読んでからコミットしている）
 
-止まったら、理由と、ワーカーの会話を開くコマンド（`claude -r <ID>`。`CLAUDE_CONFIG_DIR` で `~/.claude` 以外のアカウントを指定して動かしたときは、頭にその指定が付く）を出します。会話は設定のフォルダごとに保存されるので、ID ではほかのアカウントから開けません（記録ファイルのパスを `-r` に渡せば開ける）。直してから同じコマンドを打ち直すと、状態から続きを決め直します。同じ手順が 2 回続けてうまくいかなかったら、`--retry` を付けない限り 3 回目は起動しません（途中で切れただけの記録は数えない）。動きの記録は `.runs/history.jsonl` に 1 行ずつ残ります（渡したエフォートは `effort` に残る。権限で拒否された操作は `denials` に、理由と一緒に残る。動かした設定のフォルダは `config_dir`、API の再試行の回数は `api_retries`、途中で切れたものは `interrupted`、続きから再開した回数は `resumes` に残る）。
+止まったら、理由と、ワーカーの会話を開くコマンド（`claude -r <ID>`。`CLAUDE_CONFIG_DIR` で `~/.claude` 以外のアカウントを指定して動かしたときは、頭にその指定が付く）を出します。会話は設定のフォルダごとに保存されるので、ID ではほかのアカウントから開けません（記録ファイルのパスを `-r` に渡せば開ける）。直してから同じコマンドを打ち直すと、状態から続きを決め直します。同じ手順が 2 回続けてうまくいかなかったら、`--retry` を付けない限り 3 回目は起動しません（途中で切れただけの記録と、起動の確かめで止めた記録は数えない）。動きの記録は `.runs/history.jsonl` に 1 行ずつ残ります（渡したエフォートは `effort` に残る。権限で拒否された操作は `denials` に、理由と一緒に残る。動かした設定のフォルダは `config_dir`、API の再試行の回数は `api_retries`、途中で切れたものは `interrupted`、続きから再開した回数は `resumes`、起動の確かめで止めたものは `launch` に残る）。
 
 | 環境変数 | 既定 | 使いどころ |
 | --- | --- | --- |
 | `CLAUDE_CONFIG_DIR` | — | 2 つ目のアカウントで動かす（`CLAUDE_CONFIG_DIR=~/.claude-b shipstack run …`） |
 | `SHIPSTACK_CLAUDE` | `claude` | ワーカーを起動するコマンド（試験では偽物） |
-| `SHIPSTACK_PERMISSION_MODE` | `auto` | ワーカーの権限のモード |
+| `SHIPSTACK_PERMISSION_MODE` | `auto` | ワーカーの権限のモード（起動の確かめは、ワーカーがこのモードで始まったかを見る） |
 | `SHIPSTACK_MODEL` | — | ワーカーのモデル |
 | `CLAUDE_CODE_EFFORT_LEVEL` | — | Claude Code の環境変数。付けて打つと、どのワーカーも手順ごとのエフォートではなくこの値で動く（[下](#エフォート)） |
 | `SHIPSTACK_NOTIFY` | `1` | `0` で macOS の通知を出さない |
@@ -63,7 +64,7 @@
 - **全ワーカーを 1 つの値で動かす**（流し比べなど）: `CLAUDE_CODE_EFFORT_LEVEL=high shipstack run …` と打つ。指揮役は始めにそう知らせ、`history.jsonl` にもその値を残す
 - **効いた値を確かめる**: `usage` の「モデル（エフォート）」の列は、会話の記録にある実際の値を出す
 - **流し比べ**: 公式は自分の課題で水準を比べるよう勧める。終わった計画から性格の違うフェーズ（新しいものを足すだけ、既存の振る舞いを変える、など）を選び、同じ起点のコミットから水準を変えて流し、`usage` の時間とトークン、完了の条件と検査、止まったか、手戻りを比べる
-- 要件定義と計画（`defining-requirements`・`writing-implementation-plan`）と、その点検は `high`（各スキルの frontmatter）。対話のスキルの `effort` は、スキルが動いたターンの終わりまでしか効かない（AskUserQuestion の答えはターンの中）。後から普通のメッセージで頼むと、会話の水準（設定ファイル、無ければ Opus 5.5 の `medium`）に戻る
+- 要件定義と計画（`defining-requirements`・`writing-implementation-plan`）と、その点検は `high`（各スキルの frontmatter）。対話のスキルの `effort` は、スキルが動いたターンの終わりまでしか効かない（AskUserQuestion の答えはターンの中）。後から普通のメッセージで頼むと、会話の水準（設定ファイル、無ければ Opus 5.5 の `medium`）に戻る。`allowed-tools` の事前の許可も、次のメッセージで外れる。このため 2 つのスキルは、報告の前の問いをすべて AskUserQuestion で行い、文章で聞いて答えを待たない
 
 ### CI を待たない
 
@@ -73,6 +74,21 @@
 - 確かめるのを push の後ではなく前にするのは、同じ PR への次の push で、走っている CI が取り消されるため（GitHub Actions の `concurrency` の `cancel-in-progress`）。次の push の前なら、前の CI はたいてい終わっていて、待つ時間はほとんど無い
 - 1 つ前のフェーズの「push の後の確認」も、そのとき確かめる。プレビュー環境は、まだ前の push の状態にある
 - 最後のフェーズと決定と学びの記録の push の CI、最後のフェーズの「push の後の確認」は、仕上げのワーカーが確かめて直す。指揮役は仕上げの後に CI を待ち（最長 3600 秒）、通っていなければ止まる。緑でない CI のままマージ待ちにはならない
+
+### 起動の確かめ
+
+ワーカーは誰もいないところで動くので、思った設定で始まらなかったワーカーは、モデルを呼ぶ前に止めます。指揮役は、ワーカーの stream-json の最初の `system/init`（[公式の説明](https://code.claude.com/docs/en/headless#read-session-metadata)）と、それより前に流れるフックの記録を読み、次のどれかに当たれば、ワーカーを止めて理由を示し、止まります。
+
+| 確かめること | 合わないとき |
+| --- | --- |
+| `permissionMode` が `auto`（`SHIPSTACK_PERMISSION_MODE` の値） | auto mode が使えない（設定の `disableAutoMode`、対応していないモデル、サーバー側で止まっている）と、Claude Code は Manual で始める（[公式の説明](https://code.claude.com/docs/en/permission-modes)）。`--permission-prompts none` と組むと、書き込みがすべて拒否されたまま 1 手順を使い切る |
+| `plugins` に shipstack がある | プラグインが読み込めないと、`/shipstack:<スキル>` が展開されない。`plugin_errors` を理由に添える |
+| `--settings` の SessionStart のフック（標準エラーに `shipstack-hooks-on` と書くだけ）の `hook_response` が流れた | `--bare`（公式は将来 `-p` の既定にすると予告している）、`CLAUDE_CODE_SIMPLE`、管理者の設定の `disableAllHooks` や `strictPluginOnlyCustomization` では `--settings` のフックが動かず、決まりのフック（`guard.sh`）が効かない |
+
+- 止めたワーカーは何もしていないので、失敗として数えない（`--retry` は要らない）。`history.jsonl` には `launch: true` で残る。新しい会話は捨て、続きから再開しようとした会話は残すので、直してから打ち直すと同じ会話の続きから進む
+- 読んだ shipstack の場所が指揮役と違うとき（管理者の設定でプラグインが固定されていると、`--plugin-dir` は使われない）は、止めずに知らせる
+- `--settings` には、ほかに `"ultracode": false` と `"disableAllHooks": false` を入れる。コマンドラインの設定はプロジェクトとユーザーの設定より強い（[公式の説明](https://code.claude.com/docs/en/settings#settings-precedence)）ので、利用者の設定に `ultracode` が付いていてもワーカーが手順ごとに dynamic workflow を組まず、リポジトリの設定の `disableAllHooks` で決まりのフックが止まることもない
+- 2026-11-18 に 2.1.327 で確かめた: auto mode を設定で止めると `permissionMode` が `default` になる。`--bare` では `--settings` の SessionStart のフックの記録が流れない（`--plugin-dir` のプラグインと `permissionMode` は bare でも変わらないので、フックで見分ける）。`--plugin-dir` のプラグインは `source: "shipstack@inline"` で読まれ、インストール済みのものと置き換わる
 
 ### 途中で切れたとき
 

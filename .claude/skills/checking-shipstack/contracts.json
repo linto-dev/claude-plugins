@@ -26,6 +26,8 @@
     "cc-plugins-manifest": "https://code.claude.com/docs/en/plugins/manifest-reference.md",
     "cc-plugins-marketplace": "https://code.claude.com/docs/en/plugins/marketplace-reference.md",
     "cc-plugins-components": "https://code.claude.com/docs/en/plugins/components.md",
+    "cc-plugins-loading": "https://code.claude.com/docs/en/plugins/loading.md",
+    "cc-settings": "https://code.claude.com/docs/en/settings.md",
     "api-effort": "https://platform.claude.com/docs/en/build-with-claude/effort.md",
     "api-skills-best-practices": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices.md",
     "api-models-overview": "https://platform.claude.com/docs/en/models/overview.md",
@@ -115,13 +117,53 @@
     },
     {
       "id": "stream-event-init",
-      "claim": "stream-json の最初の system/init に、permissionMode と、読み込んだプラグインの一覧が載る",
+      "claim": "stream-json の system/init（SessionStart のフックの記録の後、モデルを呼ぶ前）に、permissionMode、読み込んだプラグインの一覧（plugins の name・path）、plugin_errors が載る。auto mode が使えずに Manual で始まった会話の permissionMode は default。指揮役はこれを読み、合わないワーカーをモデルを呼ぶ前に止める",
       "documented": true,
-      "pages": ["cc-headless"],
-      "keywords": ["system/init", ["init", "permissionMode"], "init event"],
-      "used_in": [],
-      "verify": "文書の headless と、2026-11-18 に 2.1.327 で claude -p を流したときの init",
-      "verified": "2.1.327（2026-11-18、実測）"
+      "pages": ["cc-headless", "cc-permission-modes"],
+      "keywords": ["system/init", ["init", "permissionMode"], "init event", "plugin_errors", ["init", "plugins"]],
+      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "verify": "文書の headless の「Read session metadata」と「Fail CI when a plugin or MCP server doesn't load」。2026-11-18 に 2.1.327 で、--settings '{\"disableAutoMode\":\"disable\"}' を付けると permissionMode が default になり、--plugin-dir のプラグインが plugins に source: shipstack@inline で載ること",
+      "verified": "2.1.327（2026-11-18、文書と実測）"
+    },
+    {
+      "id": "stream-event-hook-response",
+      "claim": "--settings で渡した SessionStart のフックは、新しい会話でも再開した会話（--resume）でも system/init より前に走り終え、stream-json に hook_response（hook_event・stdout・stderr・exit_code）が流れる。指揮役は、標準エラーに印を書くフックの hook_response で、--settings のフックが動く会話かを確かめる",
+      "documented": true,
+      "pages": ["cc-headless", "cc-hooks"],
+      "keywords": ["hook_response", "hook_started", ["SessionStart", "init"], ["SessionStart", "resume"], ["SessionStart", "-p"]],
+      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "verify": "文書の headless の「Read session metadata」と Agent SDK の SDKHookResponseMessage。2026-11-18 に 2.1.327 で、echo 印 >&2 のフックの hook_response の stderr に印が載り、--resume でも init より前に流れること",
+      "verified": "2.1.327（2026-11-18、文書と実測）"
+    },
+    {
+      "id": "cli-print-not-bare",
+      "claim": "claude -p は --bare を付けない限り、ログイン（OAuth）、CLAUDE.md、設定ファイルと --settings のフックを読む。公式は --bare を将来 -p の既定にすると予告している（bare ではログインを読まず、--settings のフックも動かない。--plugin-dir のプラグインと permissionMode は変わらない）。既定が変わったら、bare にしない指定をワーカーに足す。それまでに変わっても、起動の確かめ（stream-event-hook-response）がワーカーを止める",
+      "documented": true,
+      "pages": ["cc-headless", "cc-cli-reference", "cc-env-vars"],
+      "keywords": ["--bare", "bare mode", "CLAUDE_CODE_SIMPLE", ["bare", "default"]],
+      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "verify": "文書の headless の「Start faster with bare mode」。2026-11-18 に 2.1.327 で、claude --bare -p では --settings の SessionStart のフックの hook_response が流れないこと",
+      "verified": "2.1.327（2026-11-18、文書と実測）"
+    },
+    {
+      "id": "cli-plugin-dir",
+      "claim": "--plugin-dir <プラグインの根> で読んだプラグインは、同じ名前のインストール済みのマーケットプレイスのプラグインを、その会話だけ黙って置き換える（init の plugins では source が <名前>@inline）。管理者の設定の enabledPlugins に載ったプラグインは置き換わらない。指揮役はこれで、ワーカーを指揮役と同じ版のスキルで動かす",
+      "documented": true,
+      "pages": ["cc-plugins-loading", "cc-cli-reference", "cc-headless"],
+      "keywords": ["--plugin-dir", "@inline", "CLAUDE_CODE_PLUGIN_DIRS", ["plugin-dir", "precedence"], ["plugin-dir", "same name"], ["plugin-dir", "override"]],
+      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/README.md"],
+      "verify": "文書の plugins/loading の「Name conflicts」。2026-11-18 に 2.1.327 で、--plugin-dir のプラグインが init の plugins に source: shipstack@inline・path: 渡した場所で載ること（インストール済みのものとの置き換えは、文書だけで確かめた）",
+      "verified": "2.1.327（2026-11-18、文書と実測）"
+    },
+    {
+      "id": "cli-settings-precedence",
+      "claim": "--settings の値は、プロジェクト（.claude/settings.json・settings.local.json）とユーザーの設定より強い（管理者の設定より弱い）。指揮役はこれで、ワーカーの ultracode と disableAllHooks を false に決める。ultracode が true だと、Claude は大きな仕事ごとに dynamic workflow を組む",
+      "documented": true,
+      "pages": ["cc-settings", "cc-hooks", "cc-model-config"],
+      "keywords": ["ultracode", "disableAllHooks", ["settings", "precedence"], ["--settings", "override"]],
+      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "verify": "文書の settings の「Settings precedence」、hooks の「Disable or remove hooks」、model-config の ultracode",
+      "verified": "2.1.327（2026-11-18、文書）"
     },
     {
       "id": "stream-event-api-retry",

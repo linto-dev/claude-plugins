@@ -724,6 +724,12 @@ class RunTest(Fixture):
             # フックが落ちたり時間切れになったりしても、コマンドを通さない
             self.assertEqual(hook["onFailure"], "block")
             self.assertEqual(call["watchdog"], "1")
+            # 起動の確かめのフックと、利用者とリポジトリの設定に左右されないための値
+            self.assertIn(load_shipstack().HOOKS_ON, settings["hooks"]["SessionStart"][0]["hooks"][0]["command"])
+            self.assertIs(settings["ultracode"], False)
+            self.assertIs(settings["disableAllHooks"], False)
+            # 指揮役と同じ版のスキルで動かす
+            self.assertEqual(call["argv"][call["argv"].index("--plugin-dir") + 1], str(SCRIPTS.parents[2]))
         self.assertFalse((self.plan / ".runs" / "active.json").exists())
         self.assertEqual(calls[0]["prompt"], f"{implement_command()} {self.plan / 'phase-01.md'}")
         # もう一度打っても何も起動しない
@@ -808,7 +814,7 @@ class RunTest(Fixture):
         argv = self.worker_calls()[0]["argv"]
         settings = json.loads(argv[argv.index("--settings") + 1])
         self.assertEqual(settings["permissions"], {"allow": ["Bash(gh pr edit * --add-label preview)", "Bash(gh pr view *)"]})
-        self.assertEqual(list(settings), ["permissions", "hooks"])
+        self.assertEqual(list(settings), ["permissions", "hooks", "ultracode", "disableAllHooks"])
         self.assertEqual(argv[-2:], ["--add-dir", str(self.plan)])  # --add-dir は値をいくつでも取るので最後のまま
         dry = self.run_plan("--dry-run")
         self.assertIn("--settings '{\"permissions\"", dry.stdout)
@@ -855,6 +861,67 @@ class RunTest(Fixture):
         self.assertEqual(entry["permission_denials"], 1)
         self.assertEqual(entry["denials"], [{"tool": "Bash", "reason": "[External System Writes]",
                                              "input": "gh pr edit 1 --add-label preview"}])
+
+    # ---- 起動の確かめ
+
+    def assert_stopped_at_launch(self, proc: subprocess.CompletedProcess, message: str) -> dict:
+        """起動の確かめで止まった。ワーカーは何もしておらず、再開もせず、失敗としても数えない。"""
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("■ demo-p1（implementing-plan-phase）のワーカーを、起動の確かめで止めました", proc.stdout)
+        self.assertIn(message, proc.stdout)
+        self.assertEqual(len(self.worker_calls()), 1)
+        self.assertFalse((self.repo / "demo-p1.txt").exists())
+        self.assertFalse((self.plan / ".runs" / "demo-p1.json").exists())
+        entry = self.history()[-1]
+        self.assertEqual((entry["name"], entry["ok"], entry["launch"]), ("demo-p1", False, True))
+        self.assertEqual(load_shipstack().recent_failures(self.history(), "demo-p1"), 0)
+        return entry
+
+    def test_worker_that_did_not_start_in_auto_mode_is_stopped(self):
+        """auto mode が使えず Manual で始まったワーカーは、モデルを呼ぶ前に止める（書き込みがすべて拒否されるため）。"""
+        proc = self.run_plan(env={"FAKE_CLAUDE_PERMISSION_MODE": "default"})
+        entry = self.assert_stopped_at_launch(proc, "ワーカーが auto ではなく default の権限のモードで始まりました")
+        self.assertNotIn("session_id", entry)  # 何もしていない新しい会話は、usage に数えない
+        self.assertFalse((self.plan / ".runs" / "active.json").exists())
+        # 直して打ち直すと、新しい会話で進む（--retry は要らない）
+        again = self.run_plan("--once")
+        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+        self.assertIn("✓ demo-p1", again.stdout)
+        self.assertNotIn("--resume", self.worker_calls()[1]["argv"])
+
+    def test_worker_without_hooks_is_stopped(self):
+        """--settings のフックが動かない会話（--bare など）では、決まりのフックが効かないので止める。"""
+        proc = self.run_plan(env={"FAKE_CLAUDE_NO_HOOKS": "1"})
+        self.assert_stopped_at_launch(proc, "ワーカーで --settings のフックが動きませんでした")
+
+    def test_worker_without_the_plugin_is_stopped(self):
+        if load_shipstack().PLUGIN is None:
+            self.skipTest("プラグインの外に置いたスクリプトは、プラグインを確かめない")
+        proc = self.run_plan(env={"FAKE_CLAUDE_NO_PLUGIN": "1"})
+        self.assert_stopped_at_launch(proc, "プラグインが読み込まれませんでした")
+
+    def test_another_copy_of_the_plugin_only_warns(self):
+        if load_shipstack().PLUGIN is None:
+            self.skipTest("プラグインの外に置いたスクリプトは、プラグインを確かめない")
+        proc = self.run_plan("--once", env={"FAKE_CLAUDE_PLUGIN_PATH": "/elsewhere/shipstack"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("⚠ ワーカーが読んだ shipstack は /elsewhere/shipstack", proc.stdout)
+
+    def test_a_resume_stopped_at_launch_keeps_the_conversation(self):
+        """続きから再開しようとした会話を起動の確かめで止めたら、その会話を残し、直してから打ち直すと続きから進む。"""
+        cut = self.run_plan(env={"FAKE_CLAUDE_CRASH": "demo-p1:3", "SHIPSTACK_RESUME_PAUSE": "0"})
+        self.assertEqual(cut.returncode, 1, cut.stdout + cut.stderr)
+        session = self.session_of(self.worker_calls()[0])
+        proc = self.run_plan(env={"FAKE_CLAUDE_NO_HOOKS": "1"})
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("起動の確かめで止めました", proc.stdout)
+        self.assertEqual(self.history()[-1]["session_id"], session)
+        self.assertEqual(json.loads((self.plan / ".runs" / "active.json").read_text())["session_id"], session)
+        again = self.run_plan("--once")
+        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+        self.assertIn("--resume", self.worker_calls()[-1]["argv"])
+        self.assertTrue(self.session_of(self.worker_calls()[-1]).endswith(f"{session}.jsonl")
+                        or self.session_of(self.worker_calls()[-1]) == session)
 
     # ---- 途中で切れたワーカー
 
