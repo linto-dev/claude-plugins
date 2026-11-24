@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # ci.yml のアクション（commit SHA で固定したもの）を、版のコメントごと上げる。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # 出たばかりの版は、乗っ取られた版が見つかって取り下げられることがあるので、7 日待つ。
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore

@@ -226,6 +226,8 @@
 python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
 ```
 
+CI（`.github/workflows/ci.yml`）は、下の「要るもの」の下限の Python 3.9 と、最新の版の両方で流します。
+
 ## 要るもの
 
 python3（3.9 以上）、git、gh、Claude Code 2.1.295 以上（`--permission-prompts` と、フックの `onFailure`）。
