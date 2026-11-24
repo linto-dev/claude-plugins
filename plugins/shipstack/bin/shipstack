@@ -64,10 +64,10 @@ SKILLS = {skill for skill, _, _ in WORKERS.values()}
 
 
 def plugin_name() -> str | None:
-    """このスクリプトを入れたプラグインの名前（scripts/ → shipstack-shared/ → skills/ → プラグインの根）。
+    """このスクリプトを入れたプラグインの名前（bin/ → プラグインの根）。
     プラグインのスキルは /<プラグイン>:<スキル> で呼ぶ。プラグインの外（~/.claude/skills/ など）に置いたときは None。"""
     try:
-        manifest = Path(__file__).resolve().parents[3] / ".claude-plugin" / "plugin.json"
+        manifest = Path(__file__).resolve().parents[1] / ".claude-plugin" / "plugin.json"
         return json.loads(manifest.read_text(encoding="utf-8")).get("name") or None
     except (IndexError, OSError, ValueError):
         return None
@@ -75,7 +75,7 @@ def plugin_name() -> str | None:
 
 PLUGIN = plugin_name()
 # プラグインの根。ワーカーに --plugin-dir で渡し、指揮役と同じ版のスキルで動かす。
-PLUGIN_ROOT = Path(__file__).resolve().parents[3] if PLUGIN else None
+PLUGIN_ROOT = Path(__file__).resolve().parents[1] if PLUGIN else None
 
 
 def skill_command(skill: str) -> str:
@@ -106,7 +106,7 @@ AUTO_RESUMES = 2
 RESUME_PAUSE_SECONDS = 60
 # 再開した会話（claude -p --resume）では、スキルの frontmatter のフックが登録されない（2026-11-07 に 2.1.319 で確かめた）。
 # 決まりを守らせるフックは、指揮役が --settings で渡す。
-GUARD = Path(os.environ.get("SHIPSTACK_GUARD") or Path(__file__).resolve().parent / "guard.sh")
+GUARD = Path(os.environ.get("SHIPSTACK_GUARD") or Path(__file__).resolve().parents[1] / "scripts" / "guard.sh")
 GUARD_ROLES = {"phase": "implement", "merge-main": "merge-main", "decisions": "decisions", "finalize": "finalize"}
 # ワーカーの起動の確かめ。system/init を読んだところ（モデルを呼ぶ前）で行い、合わなければワーカーを止める。
 # - auto mode が使えないと、Claude Code は Manual で始める。--permission-prompts none と組むと、書き込みがすべて拒否されたまま

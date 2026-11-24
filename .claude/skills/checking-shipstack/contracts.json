@@ -41,7 +41,7 @@
       "documented": true,
       "pages": ["cc-headless", "cc-cli-reference"],
       "keywords": ["stream-json", "--output-format", "--input-format", ["-p", "--verbose"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "shipstack の試験（偽の claude に渡した引数）と、指揮役を実際に動かしたときのイベント",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -51,7 +51,7 @@
       "documented": true,
       "pages": ["cc-permission-modes", "cc-headless", "cc-cli-reference"],
       "keywords": ["--permission-mode", "defaultMode", ["auto mode", "-p"], ["auto mode", "headless"], ["auto mode", "unavailable"], ["auto mode", "manual mode"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の permission-modes と、ワーカーの system/init の permissionMode",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -61,7 +61,7 @@
       "documented": true,
       "pages": ["cc-headless", "cc-cli-reference"],
       "keywords": ["--permission-prompts", "permission-prompts"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "shipstack の試験（偽の claude に渡した引数）と文書の headless",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -71,7 +71,7 @@
       "documented": true,
       "pages": ["cc-permission-modes", "cc-permissions"],
       "keywords": ["permissions.allow", ["auto mode", "allow rule"], ["allow rule", "Bash("]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/skills/shipstack-shared/README.md"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/docs/cli.md"],
       "verify": "文書の permission-modes の「捨てられる許可ルール」と、check-plan の広すぎるルールの判定",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -81,7 +81,7 @@
       "documented": true,
       "pages": ["cc-cli-reference", "cc-hooks"],
       "keywords": ["--settings"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "shipstack の試験（--settings の中身）と、2026-11-18 に 2.1.327 で、--settings の落ちるフックがコマンドを止めたこと",
       "verified": "2.1.327（2026-11-18、実測）"
     },
@@ -91,7 +91,7 @@
       "documented": true,
       "pages": ["cc-cli-reference", "cc-sessions"],
       "keywords": ["--resume", "--session-id", "CLAUDE_CONFIG_DIR", ["resume", "transcript"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の cli-reference（--resume にパスを渡せる）と、2026-11-07 の実測",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -101,7 +101,7 @@
       "documented": true,
       "pages": ["cc-model-config", "cc-cli-reference", "cc-env-vars", "cc-skills"],
       "keywords": ["--effort", "CLAUDE_CODE_EFFORT_LEVEL", "effortLevel", "modelSettings", ["effort", "skill"], ["effort", "default"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/skills/shipstack-shared/README.md", "plugins/shipstack/README.md"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/docs/cli.md", "plugins/shipstack/README.md"],
       "verify": "文書の model-config の「Adjust effort level」",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -111,7 +111,7 @@
       "documented": true,
       "pages": ["cc-model-config", "api-effort", "api-models-overview", "api-model-deprecations", "api-release-notes"],
       "keywords": ["Opus", "Sonnet", "Haiku", "Fable", "default model", "default effort"],
-      "used_in": ["plugins/shipstack/README.md", "plugins/shipstack/skills/shipstack-shared/README.md", "plugins/shipstack/skills/writing-implementation-plan/references/plan-format.md", "plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/README.md", "plugins/shipstack/docs/cli.md", "plugins/shipstack/skills/writing-implementation-plan/references/plan-format.md", "plugins/shipstack/bin/shipstack"],
       "verify": "文書の model-config と、platform の effort・models overview・model deprecations",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -121,7 +121,7 @@
       "documented": true,
       "pages": ["cc-headless", "cc-permission-modes"],
       "keywords": ["system/init", ["init", "permissionMode"], "init event", "plugin_errors", ["init", "plugins"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless の「Read session metadata」と「Fail CI when a plugin or MCP server doesn't load」。2026-11-18 に 2.1.327 で、--settings '{\"disableAutoMode\":\"disable\"}' を付けると permissionMode が default になり、--plugin-dir のプラグインが plugins に source: shipstack@inline で載ること",
       "verified": "2.1.327（2026-11-18、文書と実測）"
     },
@@ -131,7 +131,7 @@
       "documented": true,
       "pages": ["cc-headless", "cc-hooks"],
       "keywords": ["hook_response", "hook_started", ["SessionStart", "init"], ["SessionStart", "resume"], ["SessionStart", "-p"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless の「Read session metadata」と Agent SDK の SDKHookResponseMessage。2026-11-18 に 2.1.327 で、echo 印 >&2 のフックの hook_response の stderr に印が載り、--resume でも init より前に流れること",
       "verified": "2.1.327（2026-11-18、文書と実測）"
     },
@@ -141,7 +141,7 @@
       "documented": true,
       "pages": ["cc-headless", "cc-cli-reference", "cc-env-vars"],
       "keywords": ["--bare", "bare mode", "CLAUDE_CODE_SIMPLE", ["bare", "default"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless の「Start faster with bare mode」。2026-11-18 に 2.1.327 で、claude --bare -p では --settings の SessionStart のフックの hook_response が流れないこと",
       "verified": "2.1.327（2026-11-18、文書と実測）"
     },
@@ -151,7 +151,7 @@
       "documented": true,
       "pages": ["cc-plugins-loading", "cc-cli-reference", "cc-headless"],
       "keywords": ["--plugin-dir", "@inline", "CLAUDE_CODE_PLUGIN_DIRS", ["plugin-dir", "precedence"], ["plugin-dir", "same name"], ["plugin-dir", "override"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/README.md"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/README.md"],
       "verify": "文書の plugins/loading の「Name conflicts」。2026-11-18 に 2.1.327 で、--plugin-dir のプラグインが init の plugins に source: shipstack@inline・path: 渡した場所で載ること（インストール済みのものとの置き換えは、文書だけで確かめた）",
       "verified": "2.1.327（2026-11-18、文書と実測）"
     },
@@ -161,7 +161,7 @@
       "documented": true,
       "pages": ["cc-settings", "cc-hooks", "cc-model-config"],
       "keywords": ["ultracode", "disableAllHooks", ["settings", "precedence"], ["--settings", "override"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の settings の「Settings precedence」、hooks の「Disable or remove hooks」、model-config の ultracode",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -171,7 +171,7 @@
       "documented": true,
       "pages": ["cc-headless"],
       "keywords": ["api_retry", "retry_delay_ms"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless の「Handle API retries」",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -181,7 +181,7 @@
       "documented": true,
       "pages": ["cc-headless"],
       "keywords": ["permission_denied", "permission_denials"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -191,7 +191,7 @@
       "documented": true,
       "pages": ["cc-headless"],
       "keywords": ["total_cost_usd", "modelUsage", ["result", "stream-json"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "文書の headless と Agent SDK の SDKResultMessage",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -201,29 +201,29 @@
       "documented": true,
       "pages": ["cc-errors", "cc-env-vars"],
       "keywords": ["RETRY_WATCHDOG", "MAX_RETRIES", "api_retry"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/skills/shipstack-shared/README.md"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/docs/cli.md"],
       "verify": "文書の errors の「Tune retry behavior」",
       "verified": "2.1.327（2026-11-18、文書）"
     },
     {
       "id": "skill-frontmatter-fields",
-      "claim": "スキルの frontmatter の name・description・argument-hint・arguments・disable-model-invocation・effort・allowed-tools・disallowed-tools・context: fork・agent・background・hooks を Claude Code が読む。compatibility は Agent Skills の仕様の欄で、Claude Code は無視する",
+      "claim": "スキルの frontmatter の name・description・argument-hint・arguments・disable-model-invocation・effort・allowed-tools・disallowed-tools・context: fork・background・hooks を Claude Code が読む。context: fork の agent の既定は general-purpose、background の既定は true（点検は結果を待つので false を書く）。disable-model-invocation: true のスキルの description はモデルの文脈に入らない",
       "documented": true,
       "pages": ["cc-skills"],
-      "keywords": ["frontmatter", "allowed-tools", "disallowed-tools", "disable-model-invocation", "context: fork", "argument-hint", "user-invocable", "when_to_use"],
+      "keywords": ["frontmatter", "allowed-tools", "disallowed-tools", "disable-model-invocation", "context: fork", "argument-hint", "user-invocable", "when_to_use", "background"],
       "used_in": ["plugins/shipstack/skills"],
       "verify": "文書の skills の frontmatter の表と、claude plugin validate",
-      "verified": "2.1.327（2026-11-18、文書）"
+      "verified": "2.1.331（2026-11-25、文書）"
     },
     {
       "id": "skill-substitutions",
-      "claim": "スキルの本文で $ARGUMENTS・名前付きの引数（$plan_dir）・${CLAUDE_SKILL_DIR}・${CLAUDE_SESSION_ID} が置き換わる。${CLAUDE_SKILL_DIR} は allowed-tools の Bash のルールでも置き換わる",
+      "claim": "スキルの本文で $ARGUMENTS・名前付きの引数（$plan_dir）・${CLAUDE_SKILL_DIR}・${CLAUDE_SESSION_ID}・${CLAUDE_PLUGIN_ROOT} が置き換わる。点検のスキルは ${CLAUDE_PLUGIN_ROOT} でほかのスキルの参照を指し、計画のスキルは指揮役のパスを示す",
       "documented": true,
-      "pages": ["cc-skills"],
-      "keywords": ["CLAUDE_SKILL_DIR", "CLAUDE_SESSION_ID", "$ARGUMENTS", ["substitut", "skill"]],
+      "pages": ["cc-skills", "cc-plugins-components"],
+      "keywords": ["CLAUDE_SKILL_DIR", "CLAUDE_SESSION_ID", "CLAUDE_PLUGIN_ROOT", "$ARGUMENTS", ["substitut", "skill"]],
       "used_in": ["plugins/shipstack/skills"],
-      "verify": "文書の skills の「String substitutions」",
-      "verified": "2.1.327（2026-11-18、文書）"
+      "verify": "文書の skills の「String substitutions」と、プラグインの環境変数の説明。使い捨てのプラグインのスキルに ${CLAUDE_PLUGIN_ROOT} をそのまま返させ、展開されること",
+      "verified": "2.1.331（2026-11-25、文書と実測）"
     },
     {
       "id": "skill-invocation",
@@ -231,7 +231,7 @@
       "documented": false,
       "pages": ["cc-skills", "cc-headless"],
       "keywords": ["disable-model-invocation", "Skill tool", ["skill", "slash"], ["skill", "-p"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "指揮役を実際に動かして、ワーカーがスキルの手順で動くこと",
       "verified": "2.1.322（2026-11-13、実測）"
     },
@@ -251,7 +251,7 @@
       "documented": false,
       "pages": ["cc-hooks", "cc-sessions"],
       "keywords": [["resume", "hook"], ["resume", "skill"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack", "plugins/shipstack/skills/shipstack-shared/README.md"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/docs/cli.md"],
       "verify": "スキルのフックだけで止まるコマンドを、新しい会話と --resume した会話で流し比べる",
       "verified": "2.1.319（2026-11-07、実測）"
     },
@@ -261,7 +261,7 @@
       "documented": true,
       "pages": ["cc-hooks", "cc-permissions"],
       "keywords": ["PreToolUse", "permissionDecision", "hookSpecificOutput", "exit code 2"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/guard.py", "plugins/shipstack/skills/shipstack-shared/scripts/guard.sh", ".claude/hooks/cloud-push-guard.py"],
+      "used_in": ["plugins/shipstack/scripts/guard.py", "plugins/shipstack/scripts/guard.sh", ".claude/hooks/cloud-push-guard.py"],
       "verify": "文書の hooks の「Exit code 2」と guard.py の試験",
       "verified": "2.1.327（2026-11-18、文書）"
     },
@@ -271,19 +271,19 @@
       "documented": true,
       "pages": ["cc-hooks"],
       "keywords": ["onFailure", ["hook", "fail"], ["hook", "timeout"], ["hook", "timed out"]],
-      "used_in": ["plugins/shipstack/skills/implementing-plan-phase/SKILL.md", "plugins/shipstack/skills/merging-main-into-feature/SKILL.md", "plugins/shipstack/skills/recording-plan-decisions/SKILL.md", "plugins/shipstack/skills/finalizing-feature-pr/SKILL.md", "plugins/shipstack/skills/shipstack-shared/scripts/shipstack", ".claude/settings.json"],
+      "used_in": ["plugins/shipstack/skills/implementing-plan-phase/SKILL.md", "plugins/shipstack/skills/merging-main-into-feature/SKILL.md", "plugins/shipstack/skills/recording-plan-decisions/SKILL.md", "plugins/shipstack/skills/finalizing-feature-pr/SKILL.md", "plugins/shipstack/bin/shipstack", ".claude/settings.json"],
       "verify": "使い捨てのプラグインに exit 1 で終わるフックを置き、onFailure の有無で echo が通るかを流し比べる",
       "verified": "2.1.327（2026-11-18、実測）"
     },
     {
       "id": "plugin-layout",
-      "claim": "プラグインのスキルは skills/<名前>/SKILL.md に置く。SKILL.md の無い skills/shipstack-shared/ は、スキルとして読まれずに無視される（文書に無い）",
+      "claim": "プラグインのスキルは skills/<名前>/SKILL.md に置く。プラグインの根の bin/ は、プラグインが有効な間 Bash ツールの PATH に入り、スキルは shipstack を裸のコマンドで呼べ、allowed-tools の Bash(shipstack …) の事前の許可も効く。claude -p --plugin-dir で読んだプラグインでも、フォークしたスキル（context: fork）でも同じ（この 2 つは文書に無い）",
       "documented": false,
       "pages": ["cc-plugins-components", "cc-plugins-manifest"],
-      "keywords": ["SKILL.md", ["plugin", "skills/"], ["plugin", "bin/"]],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared"],
-      "verify": "claude plugin validate plugins/shipstack の「Provides」に、shipstack-shared が出ないこと",
-      "verified": "2.1.327（2026-11-18、実測）"
+      "keywords": ["SKILL.md", ["plugin", "skills/"], ["plugin", "bin/"], "PATH"],
+      "used_in": ["plugins/shipstack/bin/shipstack", "plugins/shipstack/skills"],
+      "verify": "使い捨てのプラグインに bin/<コマンド> と、それを allowed-tools で許して呼ぶスキル（ふつうのものと context: fork のもの）を置き、claude -p --plugin-dir <場所> --permission-mode default --permission-prompts none で呼ぶ。拒否されずにコマンドの出力が返れば、PATH と事前の許可が効いている",
+      "verified": "2.1.331（2026-11-25、実測）"
     },
     {
       "id": "plugin-manifest",
@@ -321,7 +321,7 @@
       "documented": false,
       "pages": ["cc-sessions"],
       "keywords": ["transcript file", ".jsonl", "turn_duration", "cost-state", "cleanupPeriodDays"],
-      "used_in": ["plugins/shipstack/skills/shipstack-shared/scripts/shipstack"],
+      "used_in": ["plugins/shipstack/bin/shipstack"],
       "verify": "終わった計画で shipstack usage を流し、時間とトークンが「—」にならないこと",
       "verified": "2.1.322（2026-11-13、実測）"
     },
