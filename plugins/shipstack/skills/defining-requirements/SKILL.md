@@ -1,11 +1,10 @@
 ---
 name: defining-requirements
-description: 機能の追加や改修の要求（議事録、資料、思いつき）から、実装計画の前に要件定義書（requirements.md）をリポジトリの外の計画のディレクトリに書く。何を、なぜ、どこまで作るか、振る舞い、完了の条件、用語、品質特性、権限とデータを決める。確かめられる事実はコードや資料や使い捨てのスクリプトで確かめ、製品の判断だけを AskUserQuestion で利用者に聞き、決まっていないことが無くなるまで続ける。書いた後は shipstack check-requirements で形を確かめ、書いた本人ではない点検（reviewing-requirements）を呼んで直す。どう作るかは決めず、writing-implementation-plan に任せる。git の操作はしない。利用者が要求を渡して呼ぶ。
+description: 機能の追加や改修の要求（議事録、資料、思いつき）から、何を・なぜ・どこまで作るかを利用者と詰め、実装計画の前に要件定義書（requirements.md）をリポジトリの外の計画のディレクトリに書く。書いた後に形の確かめと、書いた本人ではない点検を通す。どう作るかは決めない。
 argument-hint: <要求（何をしたいか。議事録や資料のパスも書ける）>
 disable-model-invocation: true
 effort: high
-allowed-tools: Bash(${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack check-requirements *), Bash(${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack session *)
-compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack プラグインの一部として入れる（同じプラグインの shipstack-shared のスクリプトを使う）
+allowed-tools: Bash(shipstack check-requirements *), Bash(shipstack session *)
 ---
 
 # 要件を定義する
@@ -14,7 +13,7 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 
 この要件定義書を、別のセッションの計画のスキル（`writing-implementation-plan`）が読んで技術の設計とフェーズを決め、人に聞かないワーカーが実装する。計画のスキルは要件定義書に書いてあることを聞き直さない。ここで決めなかった製品の判断は、誰も決めないまま実装される。何を、なぜ、どこまで作るかは、ここで利用者と詰めて書き切る。どう作るかは決めない。
 
-要件定義書は計画のディレクトリ（リポジトリの外）に置く文書で、コミットしない。形は [references/requirements-format.md](references/requirements-format.md) にある。形の確かめは共通のスクリプト `${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack` で行う。スクリプトはリポジトリのルートで実行する。
+要件定義書は計画のディレクトリ（リポジトリの外）に置く文書で、コミットしない。形と書き方の決まりは [references/requirements-format.md](references/requirements-format.md) にある。形の確かめは `shipstack` コマンド（プラグインの `bin/`。Bash の PATH にある）で行い、リポジトリのルートで実行する。
 
 利用者への質問と報告、要件定義書は日本語で書く。
 
@@ -25,8 +24,6 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 - 不明点は AskUserQuestion で聞き、完全に解消するまでやりとりする。影響の大きいものから聞き、推奨の選択肢を先頭に置いて label の末尾に「（推奨）」を付ける
 - 利用者への問いは、報告の後を除いてすべて AskUserQuestion で行い、文章で聞いて答えを待たない。文章で聞くとそこでターンが終わり、frontmatter の `effort`（high）と `allowed-tools` が外れて、残りの手順が会話の水準で動く
 - どう作るか（技術の選択、テーブルや API の形、ファイルの置き場所）は決めず、出てきたら「計画に任せること」に書く。ただし、利用者が決める見た目、操作の作法、文言は、製品の判断としてここで決める
-- 要件定義書に「TBD」「未定」「要検討」「適切に」を残さない。決められないことは、聞いて決めるか、推奨を採って「見立て」と書く
-- 語を作らない。資料に無い業務の語が要るときは、意味を利用者と決めて「用語」に書く
 - git の操作はしない。リポジトリのファイルも変えない。試作と使い捨てのスクリプトは、計画のディレクトリの `.scratch/` に置く
 
 ## 手順
@@ -52,13 +49,13 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 - 計画のディレクトリを作り（`mkdir -p <計画のディレクトリ>`）、この会話を記録する。かかった時間とトークンを、後で `shipstack usage` が集める（点検のサブエージェントの分も含む）
 
   ```bash
-  ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack session <計画のディレクトリ> requirements ${CLAUDE_SESSION_ID}
+  shipstack session <計画のディレクトリ> requirements ${CLAUDE_SESSION_ID}
   ```
 
 ### 2. 材料を読み、要求を言い直す
 
 - 引数の要求と、そこに書かれた議事録・資料・チケットを読む。議事録やチャットを読める MCP が使えて、要求がそのプロジェクトのものなら、関係するやりとりも読む
-- リポジトリの CLAUDE.md、`docs/domain/`（用語集、品質特性の表など）、`docs/security.md`、ADR（`docs/adr/` など）を読む。同じ置き場所にある前の計画の `requirements.md` も、書き方の手本として読んでよい。前の計画の「後に回すこと」と、要求が触るコードに残った後回し（「〜ができたら足す」のようなコメント）のうち、この要求で条件がそろうものは、範囲に入れるかを 4 で聞く
+- リポジトリの CLAUDE.md、`docs/domain/`（用語集、品質特性の表など）、`docs/security.md`、ADR（`docs/adr/` など）を読む。同じ置き場所にある前の計画の `requirements.md` も、書き方の手本として読んでよい
 - 要求が触る今のコード、画面、データを調べる。広く探すときはサブエージェント（Explore）に任せ、結論とファイルの場所だけを受け取る
 - 次を 200〜300 字で示す。要求を自分の言葉で言い直したもの（誰のために、何を、なぜ。分かっている範囲で）。今の作り（ファイル:行）と、この要求が触る範囲。要求が考えていなさそうな制約、食い違い、もっと安い道筋
 - 「なぜ（誰の、どんな困りごとか）」が材料から分からなければ、それを最初に AskUserQuestion で 1 つだけ聞き、答えは自由記述の欄（Other）に書いてもらう。選択肢は答えの中身に触れない 2 つ（「下の欄に書く（推奨）」と「材料から読み取ってよい」）にし、答えの例は添えない（答えが例に引きずられる）。「材料から読み取ってよい」なら、材料から書いた「なぜ」の根拠を「見立て」とする。答えを受け取ってから 3 に進む
@@ -81,7 +78,7 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 ### 5. 方向性を比べて決める
 
 - 製品の判断を含む解き方（画面の作法、操作の流れ、段階的に出すか一度に出すか）は、構造の違う案を 2〜3 個並べ、それぞれの代償と推奨を示して AskUserQuestion で聞く。名前を変えただけの案は数えない
-- 比べた案、採らなかった理由、選んだ理由（技術と業務の両方）、根拠と出典を、「決めたこと」に 1 行ずつ書く。根拠と出典は、利用者が答えたものは「利用者の判断（日付）」、資料にあるものはその出典、試作で決めたものは試作のファイル、測っていない予想と聞かずに推奨を採ったものは「見立て」
+- 比べた案、採らなかった理由、選んだ理由、根拠と出典を、「決めたこと」に 1 行ずつ書く（列と出典の書き方は requirements-format.md）
 - 技術だけの選択（ライブラリ、テーブルの形、API の形）は比べずに「計画に任せること」に書く
 
 ### 6. 決めたことを確かめる
@@ -94,10 +91,10 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 
 ### 7. 書いて、形を確かめる
 
-[references/requirements-format.md](references/requirements-format.md) の雛形を写して、`<計画のディレクトリ>/requirements.md` に書く。完了の条件は、計画のスキルがそのまま機能の PR に写すので、確かめられる文で書き切る。
+[references/requirements-format.md](references/requirements-format.md) の雛形を写し、「書き方の決まり」に従って `<計画のディレクトリ>/requirements.md` に書く。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack check-requirements <計画のディレクトリ>
+shipstack check-requirements <計画のディレクトリ>
 ```
 
 - `problems` が出たら直し、出なくなるまで繰り返す

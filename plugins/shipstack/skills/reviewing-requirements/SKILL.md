@@ -1,15 +1,13 @@
 ---
 name: reviewing-requirements
-description: 要件定義書（計画のディレクトリの requirements.md）を、書いた本人ではない立場で、実装計画を書く前に点検する。会話を引き継がないサブエージェントで動き、この文書だけで計画を立てる人として、推測が外れると作るものが変わるところ（決まっていない名前・分岐・上限・権限、確かめられない完了の条件、振る舞いと完了の条件と範囲の食い違い、今のコードや資料との食い違い、抜けた場面、どう作るかへの踏み込み）を、重大と中の指摘にして返す。前回の点検のフォルダも渡されたときは、前回の指摘が直ったかと直した所だけを確かめる。要件定義書もコードも変えない。defining-requirements が書き終えた後に呼ぶほか、「この要件定義を点検して」と計画のディレクトリを渡されたときに使う。
+description: 要件定義書（計画のディレクトリの requirements.md）を、書いた本人ではない立場で実装計画の前に点検し、推測が外れると作るものが変わるところを重大と中の指摘にして返す。書いたものは変えない。defining-requirements が書き終えた後に呼ぶほか、「この要件定義を点検して」と計画のディレクトリを渡されたときに使う。
 argument-hint: <計画のディレクトリ> [前回の点検のフォルダ]
 arguments: [plan_dir, previous]
 effort: high
 context: fork
-agent: general-purpose
 background: false
 disallowed-tools: Write, Edit, NotebookEdit
-allowed-tools: Bash(${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack check-requirements *), Bash(diff -u *)
-compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack プラグインの一部として入れる（同じプラグインの shipstack-shared のスクリプトを使う）
+allowed-tools: Bash(shipstack check-requirements *), Bash(diff -u *)
 ---
 
 # 要件定義書を点検する
@@ -26,7 +24,7 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 
 指摘するのは、推測が外れると作るものが変わるもの（重大と中）だけにする。読み手が迷うだけで作るものが変わらないもの（言い回し、並べ方、書式、材料の行番号の小さなずれ）は指摘しない。
 
-要件定義書の形は `${CLAUDE_SKILL_DIR}/../defining-requirements/references/requirements-format.md`、洗い出しの観点は `${CLAUDE_SKILL_DIR}/../defining-requirements/references/viewpoints.md` にある。
+要件定義書の形と書き方の決まりは `${CLAUDE_PLUGIN_ROOT}/skills/defining-requirements/references/requirements-format.md`、点検の観点は `${CLAUDE_PLUGIN_ROOT}/skills/defining-requirements/references/viewpoints.md` にある。
 
 指摘は日本語で書く。
 
@@ -46,7 +44,7 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 1. リポジトリのルートで形を確かめる。`problems`・`warnings`・`assumptions` を指摘の材料にする
 
    ```bash
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack check-requirements $plan_dir
+   shipstack check-requirements $plan_dir
    ```
 
 2. `requirements.md` を読む。「材料」にある資料のうち読めるものと、リポジトリの CLAUDE.md、`docs/domain/`、`docs/security.md`、ADR、要件が前提にしているコードを読む
@@ -68,20 +66,12 @@ compatibility: Claude Code 向け。python3（3.9 以上）が要る。shipstack
 
 ## 観点
 
-- 計画を立てるのに推測が要るところ（決まっていない名前、文言、分岐、上限、順番、誰ができるか）。「など」で終わる列挙のうち、計画が中身を決めることになるもの
-- 確かめられない完了の条件（「使いやすい」「速い」、数字の無い量、何が見えたら満たしたか分からないもの）
-- 振る舞いと完了の条件の食い違い。どの完了の条件でも確かめられない大事な場面と、振る舞いに無い完了の条件
-- 範囲の矛盾。やらないことと振る舞いの食い違い、範囲の外に触る振る舞い
+viewpoints.md の 1〜10 で、計画を立てるのに推測が要るところ（決まっていない名前、文言、分岐、上限、順番、誰ができるか。中身を計画が決めることになる「など」で終わる列挙）と、確かめられない完了の条件を探す。あわせて、書いたものどうしと外との食い違いを見る。
+
+- 振る舞い・完了の条件・範囲の食い違い（どの完了の条件でも確かめられない大事な場面、振る舞いに無い完了の条件、やらないことと振る舞いの食い違い、範囲の外に触る振る舞い）
 - 今の作りや資料との食い違い（存在しない画面・データ・語、今の振る舞いと違う前提）
-- 抜けた場面（失敗、空、重複、上限、権限の無い人、同時の操作、取り消し、外部が止まったとき）
-- 新しい画面の入口と戻り道が決まっていないもの。いくつかの条件がそろって初めて使えるものに、今の状態と次にすることをどこで見せるかが決まっていないもの
-- 用語。意味の書かれていない語、同じものの別の呼び方の混在、`docs/domain/glossary.md` の定義との食い違いのうち、読み違えると作るものが変わるもの
-- 品質特性。数字の無いもの、確かめ方の無い数字、書かれていないが効きそうなもの（量の山、権限の細かさ、外部が止まったとき）
-- 権限とデータ。セキュリティの段階が無いか軽すぎる、認可の抜け、個人情報の扱い、履歴と削除の要否
-- 先に確かめる決定（viewpoints.md の 9）のうち、書かれていないもの
 - 「決めたこと」の抜け（比べた案・選んだ理由・根拠と出典の欠け、出典の無い数字、本文との食い違い）と、見立てのうち外れると作り直しになるもの
 - どう作るかへの踏み込み（技術の選択、テーブルや API の形を要件として固めているもの）。製品の判断でなければ「計画に任せること」に移す
-- 規模。計画のフェーズが十数を超えそうなら、分ける案
 
 ## 返す形
 

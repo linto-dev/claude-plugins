@@ -12,7 +12,7 @@
 /shipstack:writing-implementation-plan <計画のディレクトリ>
                                                     計画（README とフェーズごとの計画書）を書く。技術の判断を利用者に聞く
         ↓ 利用者が計画を読んで承認する
-<プラグインの場所>/skills/shipstack-shared/scripts/shipstack run <計画のディレクトリ>
+<プラグインの場所>/bin/shipstack run <計画のディレクトリ>
                                                     指揮役がワーカーを順に起動する（人に聞かない）
           implementing-plan-phase      フェーズごとに実装・検査・1 コミット・push、機能の PR を更新
           merging-main-into-feature    main が進んだら取り込む
@@ -35,7 +35,7 @@
 | `recording-plan-decisions` | 指揮役が起動する | 決定と学びを記録する |
 | `finalizing-feature-pr` | 指揮役が起動する | 機能の PR を仕上げる |
 
-`shipstack-shared` はスキルではなく、全スキルが使う共通のスクリプト（指揮役 `shipstack`、決まりのフック `guard.py`）と試験です。サブコマンドと指揮役の動きは [skills/shipstack-shared/README.md](skills/shipstack-shared/README.md) にあります。
+スキルの外に、全スキルが使う共通のスクリプトがあります。`bin/shipstack`（指揮役とサブコマンド。スキルの会話では Bash の PATH に入る）と `scripts/guard.py`（決まりのフック）です。動きは [docs/cli.md](docs/cli.md) にあります。
 
 ## 要るもの
 
@@ -57,6 +57,10 @@ Claude Code の会話で次を打ちます。
 
 要件定義と計画を打つ設定のフォルダ（`CLAUDE_CONFIG_DIR`。既定は `~/.claude`）に入れます。ワーカー（`claude -p`）には、指揮役が `--plugin-dir` で自分と同じ版のプラグインを読ませるので、ワーカーだけを 2 つ目のアカウントで動かすときは、そのアカウントに入れなくても動きます。更新は `/plugin marketplace update linto-dev` で受け取ります。
 
+### 0.6.0 で変わったこと
+
+指揮役の場所が `skills/shipstack-shared/scripts/shipstack` から `bin/shipstack` に変わりました。指揮役を打つコマンドの `<プラグインの場所>` の後ろを `bin/shipstack` に替えます。途中の計画はそのまま続けられます。
+
 ### 前の名前（plan-phases）から移る
 
 0.4.0 で名前を plan-phases から shipstack に変えました。設定のフォルダごとに、マーケットプレイスを更新してから入れ直します。
@@ -67,7 +71,7 @@ claude plugin uninstall plan-phases@linto-dev
 claude plugin install shipstack@linto-dev
 ```
 
-- スキルは `/shipstack:<スキル>`、指揮役は `<プラグインの場所>/skills/shipstack-shared/scripts/shipstack run …` で呼ぶ。スキルの名前は変わらない
+- スキルは `/shipstack:<スキル>`、指揮役は `<プラグインの場所>/bin/shipstack run …` で呼ぶ。スキルの名前は変わらない
 - 環境変数の頭は `PLAN_PHASES_` から `SHIPSTACK_` に変わった（`SHIPSTACK_MODEL` など）
 - 途中の計画はそのまま続けられる（計画のディレクトリ、`.runs/`、コミットの「フェーズ:」の行は名前に頼らない）。`usage` は前の名前で動かした会話も数える
 
@@ -78,8 +82,8 @@ claude plugin install shipstack@linto-dev
 3. 計画を読んで承認し、「開始前に人がすること」を済ませてから、リポジトリのルートで指揮役を動かす
 
    ```bash
-   <プラグインの場所>/skills/shipstack-shared/scripts/shipstack run <計画のディレクトリ> --dry-run
-   <プラグインの場所>/skills/shipstack-shared/scripts/shipstack run <計画のディレクトリ>
+   <プラグインの場所>/bin/shipstack run <計画のディレクトリ> --dry-run
+   <プラグインの場所>/bin/shipstack run <計画のディレクトリ>
    ```
 
 4. 仕上げが済んだら、PR の本文の「マージの前に行う確認」をしてから、マージコミットでマージする
@@ -96,12 +100,12 @@ Claude Opus 5.5 の公式の推奨（既定の `medium` から始めて明示し
 | フェーズ | `medium`（新しいものを足すだけ）か `high`（既存の振る舞いを変える、お金・権限・並行・移行・削除に触れる） | 計画のフェーズ表（計画のスキルが書く）。指揮役が `--effort` で渡す |
 | main の取り込み・決定と学びの記録・仕上げ | `medium` | 指揮役が `--effort` で渡す |
 
-ワーカーへの `--effort` は設定ファイルの `effortLevel`・`modelSettings` より強く、環境変数 `CLAUDE_CODE_EFFORT_LEVEL` より弱いです。根拠と、流し比べ方は [skills/shipstack-shared/README.md](skills/shipstack-shared/README.md#エフォート) にあります。
+ワーカーへの `--effort` は設定ファイルの `effortLevel`・`modelSettings` より強く、環境変数 `CLAUDE_CODE_EFFORT_LEVEL` より弱いです。根拠と、流し比べ方は [docs/cli.md](docs/cli.md#エフォート) にあります。
 
 ## 守っていること
 
 - ワーカーは `--permission-mode auto` で動き、決まりのフック（`guard.py`）が force push、main への push、PR のマージ、履歴の書き換えなどを止めます。フックが落ちたり時間切れになったりしたときも、コマンドを通さずに止めます（`onFailure: block`）
-- 指揮役は、ワーカーが auto mode で始まったこと、shipstack を読み込んだこと、`--settings` のフックが動くこと（`--bare` などでは動かない）を、モデルを呼ぶ前に確かめ、合わなければ止めます。利用者とリポジトリの設定の `ultracode` と `disableAllHooks` は、ワーカーには効かせません（[起動の確かめ](skills/shipstack-shared/README.md#起動の確かめ)）
+- 指揮役は、ワーカーが auto mode で始まったこと、shipstack を読み込んだこと、`--settings` のフックが動くこと（`--bare` などでは動かない）を、モデルを呼ぶ前に確かめ、合わなければ止めます。利用者とリポジトリの設定の `ultracode` と `disableAllHooks` は、ワーカーには効かせません（[起動の確かめ](docs/cli.md#起動の確かめ)）
 - 計画書と要件定義書はリポジトリの外に置く使い捨ての文書です。コミットメッセージとコードには、計画書が無いと読めない番号や名前を書きません（`commit-check` が止める）
 - 残すべき決定は、全フェーズの後に ADR と `docs/domain/`・`docs/security.md` に書きます
 
@@ -114,10 +118,10 @@ claude plugin marketplace add ./claude-plugins
 claude plugin install shipstack@linto-dev
 ```
 
-試験と形の確かめは、リポジトリのルートで流します。
+試験と形の確かめは、リポジトリのルートで流します。CI（`.github/workflows/ci.yml`）は、試験を Python 3.9（要るものの下限）と最新の版の両方で流します。
 
 ```bash
-python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
+python3 -I -B -m unittest discover -s plugins/shipstack/tests -v
 claude plugin validate .
 claude plugin validate plugins/shipstack
 ```

@@ -1,6 +1,6 @@
-# shipstack-shared
+# shipstack コマンドと決まりのフック
 
-実装計画を進める指揮役（`shipstack run`）と、ワーカーのスキル 4 つ（`implementing-plan-phase`、`merging-main-into-feature`、`recording-plan-decisions`、`finalizing-feature-pr`）、計画のスキル 2 つ（`writing-implementation-plan`、`reviewing-implementation-plan`。`check-requirements` と `check-plan` だけを使う）、要件定義のスキル 2 つ（`defining-requirements`、`reviewing-requirements`。`check-requirements` だけを使う）が共通で使うスクリプトです。`SKILL.md` を置かないので、スキルとしては出ません。shipstack プラグインの `skills/` に、ほかのスキルと並べて置き、各スキルは `${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/` から呼びます。
+プラグインの `bin/shipstack`（指揮役と、スキルが使う決定論的な操作のサブコマンド）と、`scripts/guard.py`（決まりのフック）の動きです。使い方は [README](../README.md) にあります。
 
 判断の要らない操作は、文章の指示ではなくここで行います。同じ入力なら同じ結果になり、スキルごとに書き方がずれません。
 
@@ -8,20 +8,22 @@
 
 | ファイル | 役目 |
 | --- | --- |
-| `scripts/shipstack` | 指揮役と、決定論的な操作のサブコマンド（下の表） |
-| `scripts/guard.py` | 各スキルの「守ること」を止める PreToolUse フック |
+| `bin/shipstack` | 指揮役と、決定論的な操作のサブコマンド（下の表） |
+| `scripts/guard.py` | ワーカーのスキルの「守ること」を止める PreToolUse フック |
 | `scripts/guard.sh` | フックの入口。python3 が無いときは git・gh・wrangler だけを止める |
-| `tests/test_shared.py` | 試験。`tests/fakes/` の偽の `gh` と `claude` で、指揮役を最後まで回す |
+| `tests/test_shipstack.py` | 試験。`tests/fakes/` の偽の `gh` と `claude` で、指揮役を最後まで回す |
+
+プラグインの `bin/` は、プラグインが有効な会話で Bash ツールの PATH に入ります（[公式の説明](https://code.claude.com/docs/en/plugins-reference)）。このためスキルは `shipstack <サブコマンド>` と裸のコマンドで呼び、`allowed-tools` も `Bash(shipstack check-plan *)` と書けます。2026-11-25 に 2.1.331 で、`claude -p --plugin-dir` で読んだプラグインの `bin/` が、本体の会話とフォークしたスキル（`context: fork`）の両方の PATH に入り、`allowed-tools` の事前の許可も効くことを確かめました。`bin/` のあるプラグインは claude.ai と Cowork には入りません（shipstack は Claude Code の CLI 向け）。
 
 ## 指揮役（shipstack run）
 
 リポジトリのルートで、計画のディレクトリを渡して動かします。`<プラグインの場所>` は、プラグインを入れた場所です。計画のスキル（`/shipstack:writing-implementation-plan`）が最後の報告で、この場所を埋めたコマンドを示します。
 
 ```bash
-<プラグインの場所>/skills/shipstack-shared/scripts/shipstack run <計画のディレクトリ> [--dry-run] [--once] [--yes] [--retry] [--fresh]
+<プラグインの場所>/bin/shipstack run <計画のディレクトリ> [--dry-run] [--once] [--yes] [--retry] [--fresh]
 ```
 
-ワーカーは `/shipstack:<スキル>` で起動します（プラグインの名前は、このスクリプトから見た `../../../.claude-plugin/plugin.json` から読む）。ワーカーには `--plugin-dir` でこのプラグインの根（このスクリプトから見た `../../..`）を渡すので、ワーカーは指揮役と同じ版のスキルで動きます。同じ名前のインストール済みのプラグインは、その会話だけ置き換わり（[公式の説明](https://code.claude.com/docs/en/plugins/loading#name-conflicts)）、ワーカーを動かす設定のフォルダ（`CLAUDE_CONFIG_DIR`）にプラグインを入れていなくても動きます。
+ワーカーは `/shipstack:<スキル>` で起動します（プラグインの名前は、このスクリプトから見た `../.claude-plugin/plugin.json` から読む）。ワーカーには `--plugin-dir` でこのプラグインの根（このスクリプトから見た `..`）を渡すので、ワーカーは指揮役と同じ版のスキルと `shipstack` で動きます。同じ名前のインストール済みのプラグインは、その会話だけ置き換わり（[公式の説明](https://code.claude.com/docs/en/plugins/loading#name-conflicts)）、ワーカーを動かす設定のフォルダ（`CLAUDE_CONFIG_DIR`）にプラグインを入れていなくても動きます。
 
 1. 計画の形を `check-plan` と同じ規則で確かめる。`problems` があれば、何も起動せずに止まる（`warnings` は件数だけを示す）
 2. 計画の README の「開始前に人がすること」があれば、最初に一度だけ済んだかを聞く（端末で y。`--yes` で済んだものとする。答えは `.runs/prerequisites.json` に残り、項目が変わるまで聞かない）
@@ -52,12 +54,7 @@
 
 ### エフォート
 
-指揮役は、ワーカーに `--effort` でエフォートを渡します。
-
-| 手順 | エフォート |
-| --- | --- |
-| フェーズ | 計画の README のフェーズ表の「エフォート」（`medium` か `high`。基準は `writing-implementation-plan/references/plan-format.md` の「フェーズ表」）。列の無い前の版の計画は `high` |
-| main の取り込み・決定と学びの記録・仕上げ | `medium` |
+指揮役は、ワーカーに `--effort` でエフォートを渡します。手順ごとの値は [README の「エフォート」](../README.md#エフォート)、フェーズの基準は [plan-format.md の「フェーズ表」](../skills/writing-implementation-plan/references/plan-format.md#フェーズ表) にあります。フェーズ表に「エフォート」の列の無い前の版の計画は、全フェーズが `high` で動きます。
 
 - **根拠**: 公式の説明（[Claude Code](https://code.claude.com/docs/en/model-config#adjust-effort-level)、[API](https://platform.claude.com/docs/en/build-with-claude/effort)。2026-11-18 に読んだ）。Claude Opus 5.5 の既定は `medium` で、「`medium` から始めて明示し、前のモデルの設定を持ち越さず、自分の課題で水準を比べる。`xhigh` と `max` は差を測った仕事にだけ使う」。`medium` は「新しい機能の実装のような、範囲のはっきりした日々の開発」、`high` は「既存のコードベースのバグを直すような、検証が要り端が出やすい仕事」に当たる。前の版は何も渡さず、設定ファイルの値（ある利用者は `xhigh`）で全手順が動いていた
 - **効く順**: `CLAUDE_CODE_EFFORT_LEVEL` ＞ スキルの frontmatter の `effort`（スキルが動いている間）＞ 会話で選んだ水準 ＞ `--effort` ＞ 設定ファイル（`modelSettings`・`effortLevel`）＞ モデルの既定。`--effort` は設定ファイルより強いので、`~/.claude/settings.json` で `xhigh` にしていても、ワーカーは表の値で動く。ワーカーのスキルの frontmatter には `effort` を書かない（書くと `--effort` が効かなくなる）
@@ -171,7 +168,7 @@
 
 ## 計画の形（check-plan）
 
-計画の形は `writing-implementation-plan/references/plan-format.md` にあります。`check-plan` は、人の判断の要らないことだけを決まった規則で確かめ、結果を `problems`・`warnings`・`assumptions` に分けて出します。計画のスキルは書いた後に、点検のスキルは点検の最初に、指揮役は始める前に使います。
+計画の形は [plan-format.md](../skills/writing-implementation-plan/references/plan-format.md) にあります。`check-plan` は、人の判断の要らないことだけを決まった規則で確かめ、結果を `problems`・`warnings`・`assumptions` に分けて出します。計画のスキルは書いた後に、点検のスキルは点検の最初に、指揮役は始める前に使います。
 
 | 出すもの | 中身 |
 | --- | --- |
@@ -183,7 +180,7 @@
 
 ## 要件定義書の形（check-requirements）
 
-要件定義書の形は `defining-requirements/references/requirements-format.md` にあります。`check-requirements <計画のディレクトリ>` は、計画のディレクトリの `requirements.md` を読み、`check-plan` と同じく `problems`・`warnings`・`assumptions` と、完了の条件の一覧（`conditions`）を出します。要件定義のスキルは書いた後に、要件定義の点検は点検の最初に、計画のスキルは書き始める前に使います。git を使わないので、リポジトリの外でも動きます。
+要件定義書の形は [requirements-format.md](../skills/defining-requirements/references/requirements-format.md) にあります。`check-requirements <計画のディレクトリ>` は、計画のディレクトリの `requirements.md` を読み、`check-plan` と同じく `problems`・`warnings`・`assumptions` と、完了の条件の一覧（`conditions`）を出します。要件定義のスキルは書いた後に、要件定義の点検は点検の最初に、計画のスキルは書き始める前に使います。git を使わないので、リポジトリの外でも動きます。
 
 | 出すもの | 中身 |
 | --- | --- |
@@ -216,18 +213,4 @@
 
 試験は、手で書いた例に加えて、本物の bash を正解の役にした確かめを持ちます。禁止の操作をシェルの書き方で包んだコマンドを、固定した種で 400 件作り、引数を記録するだけの偽の `git`・`gh` を置いた bash で動かします。そのうえで、bash が禁止の操作を実際に動かしたコマンドを、guard.py がすべて止めたかを確かめます。生成したコマンドの 4 分の 1 以上が禁止の操作まで届かなければ、確かめが空回りしているとして落ちます（`GuardShellOracleTest`）。
 
-フックのコマンドは `"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh"` です。プラグインのスキルの frontmatter のフックでは `CLAUDE_PLUGIN_ROOT` が使え、`${CLAUDE_SKILL_DIR}` は展開されません（2026-11-13 に Claude Code 2.1.322 で確かめた）。`onFailure: block` も、スキルの frontmatter のフックと `--settings` のフックの両方で効きます（2026-11-18 に 2.1.327 で、落ちるフックを置いて確かめた。無いとコマンドが通り、有ると止まる）。見つからないと、フックの失敗としてすべての Bash が止まるので、置き場所を変えるときは、このパスも直します。`claude -p` でも、スキルの frontmatter のフックは動きます（2026-11-05 に確かめた）。
-
-## 試験
-
-リポジトリのルートで流します。
-
-```bash
-python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
-```
-
-CI（`.github/workflows/ci.yml`）は、下の「要るもの」の下限の Python 3.9 と、最新の版の両方で流します。
-
-## 要るもの
-
-python3（3.9 以上）、git、gh、Claude Code 2.1.295 以上（`--permission-prompts` と、フックの `onFailure`）。
+フックのコマンドは `"${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh"` です。プラグインのスキルの frontmatter のフックでは `CLAUDE_PLUGIN_ROOT` が使え、`${CLAUDE_SKILL_DIR}` は展開されません（2026-11-13 に Claude Code 2.1.322 で確かめた）。`onFailure: block` も、スキルの frontmatter のフックと `--settings` のフックの両方で効きます（2026-11-18 に 2.1.327 で、落ちるフックを置いて確かめた。無いとコマンドが通り、有ると止まる）。見つからないと、フックの失敗としてすべての Bash が止まるので、置き場所を変えるときは、このパスも直します。`claude -p` でも、スキルの frontmatter のフックは動きます（2026-11-05 に確かめた）。

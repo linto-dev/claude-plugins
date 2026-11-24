@@ -26,7 +26,7 @@ import sys
 import time
 from pathlib import Path
 
-SHIPSTACK = Path(__file__).resolve().parents[2] / "scripts" / "shipstack"
+SHIPSTACK = Path(__file__).resolve().parents[2] / "bin" / "shipstack"
 prompt = sys.stdin.read().strip()
 LOG = os.environ.get("FAKE_CLAUDE_LOG")
 if LOG:

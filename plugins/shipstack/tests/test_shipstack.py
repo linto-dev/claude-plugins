@@ -1,6 +1,6 @@
-"""shipstack-shared のスクリプトの試験。
+"""shipstack のスクリプト（bin/shipstack と scripts/guard.py）の試験。
 
-使い方（リポジトリのルートで）: python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
+使い方（リポジトリのルートで）: python3 -I -B -m unittest discover -s plugins/shipstack/tests -v
 
 使い捨てのリポジトリ（origin の代わりの bare リポジトリ、main、計画の README と計画書）を毎回作って、guard.py と shipstack の決定論的なふるまいを確かめる。
 GitHub と Claude には出ない。gh と claude は tests/fakes/ の偽物に差し替え、指揮役（shipstack run）を最後まで回す。
@@ -24,14 +24,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# scripts/ に __pycache__ を作らない（shipstack を読み込んで関数を試すため）。
+# bin/ と scripts/ に __pycache__ を作らない（shipstack を読み込んで関数を試すため）。
 sys.dont_write_bytecode = True
 
 HERE = Path(__file__).resolve().parent
-SCRIPTS = HERE.parent / "scripts"
+PLUGIN_ROOT = HERE.parent
+SCRIPTS = PLUGIN_ROOT / "scripts"
+SKILLS = PLUGIN_ROOT / "skills"
 FAKES = HERE / "fakes"
 GUARD = SCRIPTS / "guard.py"
-SHIPSTACK = SCRIPTS / "shipstack"
+SHIPSTACK = PLUGIN_ROOT / "bin" / "shipstack"
 ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid", "SHIPSTACK_NOTIFY": "0",
        "PATH": f"{FAKES}{os.pathsep}{os.environ['PATH']}", "SHIPSTACK_CLAUDE": str(FAKES / "claude")}
@@ -268,7 +270,7 @@ def implement_command() -> str:
 class PluginTest(unittest.TestCase):
     def test_worker_skills_are_called_with_the_plugin_name(self):
         module = load_shipstack()
-        manifest = SCRIPTS.parents[2] / ".claude-plugin" / "plugin.json"
+        manifest = PLUGIN_ROOT / ".claude-plugin" / "plugin.json"
         expected = json.loads(manifest.read_text(encoding="utf-8"))["name"] if manifest.exists() else None
         self.assertEqual(module.PLUGIN, expected)
         self.assertEqual(module.skill_command("implementing-plan-phase"),
@@ -347,12 +349,12 @@ class GuardHookTest(unittest.TestCase):
     def test_worker_skills_block_when_the_guard_fails(self):
         """ワーカーのスキルの frontmatter のフックは、役目を付けて guard.sh を呼び、落ちたり時間切れになったりしたら止める。
         Claude Code の既定では、失敗したフックはコマンドを通す。"""
-        skills = HERE.parent.parent
+        skills = SKILLS
         roles = {"implementing-plan-phase": "implement", "merging-main-into-feature": "merge-main",
                  "recording-plan-decisions": "decisions", "finalizing-feature-pr": "finalize"}
         for skill, role in roles.items():
             frontmatter = (skills / skill / "SKILL.md").read_text(encoding="utf-8").split("---\n")[1]
-            self.assertIn(f"""command: '"${{CLAUDE_PLUGIN_ROOT}}/skills/shipstack-shared/scripts/guard.sh" {role}'""",
+            self.assertIn(f"""command: '"${{CLAUDE_PLUGIN_ROOT}}/scripts/guard.sh" {role}'""",
                           frontmatter, skill)
             self.assertRegex(frontmatter, r"\n {10}onFailure: block\n", skill)
 
@@ -938,7 +940,7 @@ class RunTest(Fixture):
             self.assertIs(settings["ultracode"], False)
             self.assertIs(settings["disableAllHooks"], False)
             # 指揮役と同じ版のスキルで動かす
-            self.assertEqual(call["argv"][call["argv"].index("--plugin-dir") + 1], str(SCRIPTS.parents[2]))
+            self.assertEqual(call["argv"][call["argv"].index("--plugin-dir") + 1], str(PLUGIN_ROOT))
         self.assertFalse((self.plan / ".runs" / "active.json").exists())
         self.assertEqual(calls[0]["prompt"], f"{implement_command()} {self.plan / 'phase-01.md'}")
         # もう一度打っても何も起動しない
@@ -1512,7 +1514,7 @@ class CheckPlanTest(Fixture):
     def test_value_keys_cover_every_skill(self):
         """各スキルが values --require で読む欄が、check-plan の確かめる欄に入っている（スキルを変えたら追いつかせる）。"""
         keys = set(load_shipstack().VALUE_KEYS)
-        skills = HERE.parent.parent
+        skills = SKILLS
         seen = 0
         for skill in ("implementing-plan-phase", "merging-main-into-feature", "recording-plan-decisions", "finalizing-feature-pr"):
             for line in (skills / skill / "SKILL.md").read_text(encoding="utf-8").splitlines():

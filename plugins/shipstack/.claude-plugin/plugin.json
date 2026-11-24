@@ -1,7 +1,7 @@
 {
   "name": "shipstack",
   "description": "要件定義から計画、フェーズごとの実装、PR の仕上げまでを、人に聞かないワーカーで進める開発フロー（Cloudflare と TypeScript のモノレポ向け）",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "author": {
     "name": "linto-dev",
     "url": "https://github.com/linto-dev"

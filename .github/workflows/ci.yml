@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: 共通のスクリプトの試験
-        run: python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
+        run: python3 -I -B -m unittest discover -s plugins/shipstack/tests -v
       - name: shipstack の点検のスクリプトの試験
         run: python3 -I -B -m unittest discover -s .claude/skills/checking-shipstack/tests -v
 

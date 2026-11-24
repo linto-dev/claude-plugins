@@ -1,15 +1,14 @@
 ---
 name: recording-plan-decisions
-description: 実装計画の全フェーズが機能ブランチに入った後、機能の PR を仕上げる前に必ず 1 回行う決まった手順（決定と学びの記録）。要件定義書（requirements.md）と計画の README とフェーズのコミットの「決めたこと」を、できあがったコード・テスト・コメント・既存の ADR と突き合わせ、決まった規則で決定ごとに ADR・仕組みとコメント・残さないを判定して書く。要件定義書の用語・品質特性・セキュリティの段階を docs/domain/ と docs/security.md に写す。止まった記録（shipstack stops）から繰り返した問題を見つけ、リポジトリの仕組みかフローへの気づきに落とす。人には聞かない（ADR は機能の PR で提案になり、利用者がマージで採用する）。番号と形はスクリプトで確かめ、1 つのコミットにして push し、機能の PR の進捗を更新する。shipstack run が claude -p で起動するほか、計画のディレクトリを渡して手で呼ぶ。
+description: 実装計画の全フェーズが機能ブランチに入った後、機能の PR を仕上げる前に 1 回行う、決定と学びの記録。要件定義書・計画の README・コミットの「決めたこと」をできあがったコードと突き合わせ、決まった規則で ADR・仕組みとコメント・残さないを判定して書き、業務の知識を docs/domain/ と docs/security.md に写し、繰り返した問題への対策を残す。人には聞かない。shipstack run が claude -p で起動する。手で動かすときは、計画のディレクトリを渡して /shipstack:recording-plan-decisions で呼ぶ。
 argument-hint: <計画のディレクトリ>
 disable-model-invocation: true
-compatibility: Claude Code 向け。git、gh、jq、python3（3.9 以上）が要る。shipstack プラグインの一部として入れる（同じプラグインの shipstack-shared のスクリプトを使う）
 hooks:
   PreToolUse:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" decisions'
+          command: '"${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh" decisions'
           timeout: 30
           onFailure: block
 ---
@@ -24,23 +23,23 @@ ADR にするかどうかは、ここで初めて決める。書く条件の「�
 
 要件定義書はリポジトリの外にあって、リポジトリからは読めないので、業務の知識（用語、品質特性、セキュリティの段階）は、ここでリポジトリの `docs/domain/` と `docs/security.md` に写す（中身の決まりは [references/adr-rules.md](references/adr-rules.md) の 6 章）。用語集の「コードの名前」は、コードができた今だから書ける。 判定は下の規則で決め、人には聞かない。ADR は機能の PR で提案になり、利用者がマージで採用する（[references/adr-rules.md](references/adr-rules.md) の 3 章）。残したくないものは、利用者がマージの前に PR で外させる。
 
-判断の要らない操作は共通のスクリプト `${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack` と、このスキルの `scripts/` で行う。スクリプトはリポジトリのルートで実行する。
+判断の要らない操作は `shipstack` コマンド（プラグインの `bin/`。Bash の PATH にある）と、このスキルの `scripts/` で行う。スクリプトはリポジトリのルートで実行する。
 
 利用者への報告と結果ファイルは日本語で書く。
 
 ## 守ること
 
-決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`shipstack-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作（force push、main への push、PR のマージ、履歴の書き換えなど）は、frontmatter の決まりのフック（プラグインの `scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。止まるのは、既存の ADR と食い違う決定があり、置き換えるか機能の側を直すかを材料から決められないときだけ（手順 8 の結果ファイルを `--status stopped` で書いて終える）
-- git と gh の操作は、`{{機能ブランチ}}` へのコミットと push、機能の PR の本文の更新に限る。main への直接のコミットと push、ブランチの作成、PR の作成とマージ、force push、タグ、履歴の書き換え（rebase、`reset --hard`、push 済みのコミットの amend）はしない
+- git と gh の操作は、`{{機能ブランチ}}` へのコミットと push、機能の PR の本文の更新に限る
 - 計画書と要件定義書は削除も書き換えもしない（機能の PR のマージ後に利用者が削除する）
 - 仕様や参照先は、必要に応じて Web Search や context7 で最新の情報を確かめる
 
 ## 値を読む
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ "ADR のディレクトリ" 静的解析 テスト "PR の決まり"
+shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ "ADR のディレクトリ" 静的解析 テスト "PR の決まり"
 ```
 
 `values` の値を、以下の `{{…}}` に使う。表に無い欄があると失敗するので、推測で埋めずに止まる。この手順の名前は `{{計画名}}-decisions`（結果ファイルの名前と、コミットメッセージの「手順:」の行に使う）。
@@ -63,7 +62,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
 次を実行する。機能ブランチで、origin と同じで、未コミットの変更が無く、フェーズ表の作業名がすべてコミットの「フェーズ:」の行にあること（全フェーズが済んでいる）を確かめる。`ok` が false なら止まる。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack preflight <計画のディレクトリ> --require-phases-done
+shipstack preflight <計画のディレクトリ> --require-phases-done
 ```
 
 ### 2. 材料を集める
@@ -72,7 +71,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack preflight <計画の�
 
 ```bash
 ${CLAUDE_SKILL_DIR}/scripts/gather-decisions.sh <計画のディレクトリ>
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack stops <計画のディレクトリ>
+shipstack stops <計画のディレクトリ>
 ```
 
 あわせて、既存の ADR の表題と、`docs/domain/` と `docs/security.md` があれば読む（`grep -h "^# ADR-" {{ADR のディレクトリ}}*.md`）。
@@ -146,7 +145,7 @@ ${CLAUDE_SKILL_DIR}/scripts/check-adr.sh --plan-dir <計画のディレクトリ
    cat > "$msg" <<'EOF'
    <埋めたコミットメッセージの全文>
    EOF
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack commit-check decisions "$msg" --plan <計画のディレクトリ> && git commit -F "$msg"
+   shipstack commit-check decisions "$msg" --plan <計画のディレクトリ> && git commit -F "$msg"
    ```
 
 4. `git push` し、機能の PR の進捗にチェックを入れる: `shipstack pr-check-off <計画のディレクトリ> 決定と学びの記録 <短いハッシュ>`
@@ -159,7 +158,7 @@ ${CLAUDE_SKILL_DIR}/scripts/check-adr.sh --plan-dir <計画のディレクトリ
 止まったときも書く（`--status stopped --stopped-reason "<…>"`）。コミットしなかったときは `--commit` を付けない。コミットしなかったときは、残さなかった決定を `--not-kept` で書く。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack result <計画のディレクトリ> --name {{計画名}}-decisions --skill recording-plan-decisions --status done --commit <短いハッシュ> --pr <機能の PR の URL> --summary "<残したもの、残さなかった決定の数、workflow-feedback.md に書いたこと>"
+shipstack result <計画のディレクトリ> --name {{計画名}}-decisions --skill recording-plan-decisions --status done --commit <短いハッシュ> --pr <機能の PR の URL> --summary "<残したもの、残さなかった決定の数、workflow-feedback.md に書いたこと>"
 ```
 
 そのうえで、残したもの（ADR の番号と表題、足した仕組み、書いた業務の知識）、コミットのハッシュを、終わったことの報告として示す。

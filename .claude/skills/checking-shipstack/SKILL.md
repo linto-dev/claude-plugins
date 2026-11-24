@@ -92,7 +92,7 @@ python3 -I .claude/skills/checking-shipstack/scripts/collect.py validate
    - 試験と形の確かめを通す（試験は 3 分ほどかかるので、Bash の timeout を 600000 にする）
 
      ```bash
-     python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests
+     python3 -I -B -m unittest discover -s plugins/shipstack/tests
      python3 -I -B -m unittest discover -s .claude/skills/checking-shipstack/tests
      python3 -I .claude/skills/checking-shipstack/scripts/collect.py validate
      ```

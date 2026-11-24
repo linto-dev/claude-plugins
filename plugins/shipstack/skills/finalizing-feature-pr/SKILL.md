@@ -1,15 +1,14 @@
 ---
 name: finalizing-feature-pr
-description: 実装計画の全フェーズと決定と学びの記録が機能ブランチに入った後、書いた本人ではない新しいセッションとして、機能全体と各フェーズの完了の条件を機能ブランチの状態で確かめ直し、機能の PR を仕上げる（タイトルの WIP: を外し、本文をマージの判断に使える形に書き直す）。満たさない条件は直して新しいコミットとして積む。E2E があれば最後の push に流し、変わった記録を読んでからコミットする。人には聞かず、計画の範囲を超える直しが要るときは理由を書いて止まる。マージはしない。shipstack run が最後に claude -p で起動するほか、「機能の PR を仕上げて」と計画のディレクトリを渡されたときに使う。
+description: 実装計画の全フェーズと決定と学びの記録が機能ブランチに入った後、書いた本人ではない新しいセッションとして、機能全体と各フェーズの完了の条件を確かめ直し、満たさないものを直し、E2E があれば最後の push に流して、機能の PR を仕上げる（タイトルの WIP: を外し、本文をマージの判断に使える形にする）。マージはしない。人には聞かず、計画の範囲を超える直しが要るときは理由を書いて止まる。shipstack run が最後に claude -p で起動する。手で動かすときは、計画のディレクトリを渡して /shipstack:finalizing-feature-pr で呼ぶ。
 argument-hint: <計画のディレクトリ>
 disable-model-invocation: true
-compatibility: Claude Code 向け。git、gh、python3（3.9 以上）が要る。shipstack プラグインの一部として入れる（同じプラグインの shipstack-shared のスクリプトを使う）
 hooks:
   PreToolUse:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" finalize'
+          command: '"${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh" finalize'
           timeout: 30
           onFailure: block
 ---
@@ -18,13 +17,13 @@ hooks:
 
 引数: `$ARGUMENTS`（計画のディレクトリ）
 
-レビューの段階は設けないので、ここが実装を確かめる場になる。main へのマージが本番へのデプロイになるので、機能全体の確認はこの PR で行う。判断の要らない操作は共通のスクリプト `${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack` で行う。出力は JSON で、`ok` が false なら `problems` か `error` を読む。スクリプトはリポジトリのルートで実行する。
+レビューの段階は設けないので、ここが実装を確かめる場になる。main へのマージが本番へのデプロイになるので、機能全体の確認はこの PR で行う。判断の要らない操作は `shipstack` コマンド（プラグインの `bin/`。Bash の PATH にある）で行う。出力は JSON で、`ok` が false なら `problems` か `error` を読む。スクリプトはリポジトリのルートで実行する。
 
 利用者への報告、PR の本文、結果ファイルは日本語で書く。
 
 ## 守ること
 
-決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`shipstack-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作（force push、main への push、PR のマージ、履歴の書き換えなど）は、frontmatter の決まりのフック（プラグインの `scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。止まるのは次のときだけ（手順 6 の結果ファイルを `--status stopped` で書いて終える）
   - 満たさない条件を直すのに、計画の README や計画書の「変えてはいけないこと」「対象外」に触れる変更が要る
@@ -32,14 +31,13 @@ hooks:
   - CI が手元で再現しない理由で落ちていて直せない
   - E2E が環境の不備で流せない、E2E を通すのにテストの期待を変える必要がある、E2E の記録に秘密の値が入っている（手順 4）
 - git と gh の操作は、fetch、機能の PR のタイトルと本文の編集（`shipstack pr-finalize` が行う）、直しの `{{機能ブランチ}}` へのコミットと push に限る
-- main への直接のコミットと push、ブランチの作成、PR の作成とマージ、force push、タグ、履歴の書き換え（rebase、`reset --hard`、push 済みのコミットの amend）はしない
 - デプロイはしない（main へのマージで GitHub Actions が行う）
 - `{{許可するコマンド}}` に書かれたコマンドは実行してよい。1 回の Bash で単独で実行し、ほかのコマンドと（`&&`・`;`・`|` で）つながない。指揮役が渡す許可ルールはつないだ全体には効かず、auto mode の分類器に回って拒否されることがある。権限が足りずに拒否された操作は繰り返さず、PR の「マージの前に行う確認」に回す
 
 ## 値を読む
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ インストール 静的解析 テスト "PR の決まり" 許可するコマンド "PR のタイトル"
+shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ インストール 静的解析 テスト "PR の決まり" 許可するコマンド "PR のタイトル"
 ```
 
 `values` の値を、以下の `{{…}}` に使う。表に無い欄があると失敗するので、推測で埋めずに止まる。`{{E2E}}` は `--require` に入れない（前に書いた計画には欄が無い）。`values` の出力に無いか null なら、E2E は無い。
@@ -81,7 +79,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
   cat > "$msg" <<'EOF'
   <埋めたコミットメッセージの全文>
   EOF
-  ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack commit-check fix "$msg" && git commit -F "$msg"
+  shipstack commit-check fix "$msg" && git commit -F "$msg"
   ```
 
 - `shipstack ci <計画のディレクトリ>` で CI の結果を確かめ、2 をやり直してから 4 に進む
@@ -106,7 +104,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
 1. 下書きを出す。README・計画書・決定と学びの記録のコミット・結果ファイルから写す部分（完了の条件、変えてはいけないこと、対象外、ADR と残さなかった決定、マージの前に行う確認、マージの後に行うこと、マージの方法）は、スクリプトが写す
 
    ```bash
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack pr-body <計画のディレクトリ>
+   shipstack pr-body <計画のディレクトリ>
    ```
 
 2. `<…>` の置き換える場所を埋める。書き方は [references/pr-body.md](references/pr-body.md) にある。写した文は変えない（完了の条件は、行の先頭の `[ ]` と行末の根拠だけを足す）
@@ -117,7 +115,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
    cat > "$body" <<'EOF'
    <仕上げた本文の全文>
    EOF
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack pr-finalize <計画のディレクトリ> "$body"
+   shipstack pr-finalize <計画のディレクトリ> "$body"
    ```
 
 ### 6. 結果ファイルを書いて報告する
@@ -125,7 +123,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
 止まったときも書く（`--status stopped --stopped-reason "<…>"`）。修正を積まなかったときは `--commit` を付けない。`--manual-step` には、PR の本文の「マージの前に行う確認」と「マージの後に行うこと」を、行う順に 1 つずつ書く（先頭に「マージの前:」「マージの後:」を付ける）。指揮役は最後にこれを番号付きで示す。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack result <計画のディレクトリ> --name {{計画名}}-finalize --skill finalizing-feature-pr --status done --pr <機能の PR の URL> --ci <pass|fail|pending|none> --summary "<確かめ直した結果と、直したこと>" --manual-step "マージの前: <確認や作業>" --manual-step "マージの後: <確認や作業>"
+shipstack result <計画のディレクトリ> --name {{計画名}}-finalize --skill finalizing-feature-pr --status done --pr <機能の PR の URL> --ci <pass|fail|pending|none> --summary "<確かめ直した結果と、直したこと>" --manual-step "マージの前: <確認や作業>" --manual-step "マージの後: <確認や作業>"
 ```
 
 そのうえで PR の URL を示す。修正を積んだときは、そのコミットのハッシュと CI の結果も示す。最後の報告は、終わったことの報告として書く。

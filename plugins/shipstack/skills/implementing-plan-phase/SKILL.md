@@ -1,15 +1,14 @@
 ---
 name: implementing-plan-phase
-description: 実装計画の 1 つのフェーズを、その計画書に従って実装し、検査とテストを通して 1 つのコミットにまとめ、機能ブランチに push する。push の前に、前の push の CI と 1 つ前のフェーズの「push の後の確認」を確かめ、落ちていればこのフェーズで直す。機能の PR の進捗にチェックを入れ（最初のフェーズなら機能の PR を WIP で作り）、自分の push の CI は待たずに終える（次のフェーズが確かめる）。人には聞かず、決められないときは理由を書いて止まる。shipstack run が claude -p で起動するほか、「このフェーズの計画書を実装して」と計画書のパスを渡されたときに使う。
+description: 実装計画の 1 つのフェーズを計画書どおりに実装し、検査とテストを通して 1 つのコミットにまとめ、機能ブランチに push して機能の PR の進捗を更新する。push の前に、前の push の CI と 1 つ前のフェーズの「push の後の確認」を確かめて直す。人には聞かず、決められないときは理由を書いて止まる。shipstack run が claude -p で起動する。手で動かすときは、計画書のパスを渡して /shipstack:implementing-plan-phase で呼ぶ。
 argument-hint: <計画書のパス>
 disable-model-invocation: true
-compatibility: Claude Code 向け。git、gh、python3（3.9 以上）が要る。shipstack プラグインの一部として入れる（同じプラグインの shipstack-shared のスクリプトを使う）
 hooks:
   PreToolUse:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: '"${CLAUDE_PLUGIN_ROOT}/skills/shipstack-shared/scripts/guard.sh" implement'
+          command: '"${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh" implement'
           timeout: 30
           onFailure: block
 ---
@@ -18,13 +17,13 @@ hooks:
 
 引数: `$ARGUMENTS`（計画書のパス）
 
-計画書と同じディレクトリが**計画のディレクトリ**、その `README.md` が**計画の README** になる。判断の要らない操作は共通のスクリプト `${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack` で行う。出力は JSON で、`ok` が false なら `problems` か `error` を読む。スクリプトはリポジトリのルートで実行する（計画のディレクトリが Git の外にあるので、そこに cd すると git と gh が動かない）。
+計画書と同じディレクトリが**計画のディレクトリ**、その `README.md` が**計画の README** になる。判断の要らない操作は `shipstack` コマンド（プラグインの `bin/`。Bash の PATH にある）で行う。出力は JSON で、`ok` が false なら `problems` か `error` を読む。スクリプトはリポジトリのルートで実行する（計画のディレクトリが Git の外にあるので、そこに cd すると git と gh が動かない）。
 
 利用者への報告と結果ファイルは日本語で書く。
 
 ## 守ること
 
-決まりに反する git・gh・wrangler の操作は、frontmatter のフック（`shipstack-shared/scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
+決まりに反する git・gh・wrangler の操作（force push、main への push、PR のマージ、履歴の書き換えなど）は、frontmatter の決まりのフック（プラグインの `scripts/guard.py`）が止める。止められたら、回り込まずに理由を読み、止まる。
 
 - 人には聞かない。誰も答えないところで動く（`shipstack run` は `claude -p` で起動する）
 - 計画書が決めるのは、約束（後のフェーズや外が頼る名前・形・エラー・文言・表）、従う決まり、作り方、テストのケースと期待する結果、完了の条件まで。関数の分け方、問い合わせの組み立て、内部の名前、export、テストの準備の値、見た目の細部は、CLAUDE.md と既存のコードの形に合わせて自分で決める。計画書との違いは書き残さない（計画書は使い捨て）
@@ -38,14 +37,13 @@ hooks:
 - コミットメッセージ、コードのコメント、テストの名前に、計画書と要件定義書にだけある番号・記号・名前（「規則 B」「決めたこと 2」「要件の #28」、作業名、計画書のファイル名、「フェーズ 3」）を書かない。中身を言葉で書く。計画書はリポジトリの外にあって使い捨てなので、マージの後は誰も読めない（`commit-check` が止める）
 - 計画書と計画の README は読むだけにする。進捗やチェックボックスを書き換えない（進み具合の正はコミットと機能の PR）
 - git と gh の操作は、`{{機能ブランチ}}` へのコミットと push、機能の PR の作成と本文の更新に限る
-- main への直接のコミットと push、ブランチの作成、ほかの PR の作成、PR のマージ、force push、タグ、履歴の書き換え（rebase、`reset --hard`、push 済みのコミットの amend）はしない
 - デプロイはしない（本番とプレビュー環境は GitHub Actions が行う）
 - `{{許可するコマンド}}` に書かれたコマンドは実行してよい。1 回の Bash で単独で実行し、ほかのコマンドと（`&&`・`;`・`|` で）つながない。指揮役が渡す許可ルールはつないだ全体には効かず、auto mode の分類器に回って拒否されることがある。権限が足りずに拒否された操作は繰り返さず、できなかったこととして記録する
 
 ## 値を読む
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ インストール 静的解析 テスト テストの範囲 "UI の方針" "PR の決まり" 許可するコマンド "PR のタイトル"
+shipstack values <計画のディレクトリ> --require 計画名 機能ブランチ インストール 静的解析 テスト テストの範囲 "UI の方針" "PR の決まり" 許可するコマンド "PR のタイトル"
 ```
 
 `values` の値を、以下の `{{…}}` に使う。「なし」の欄は null になる。表に無い欄があると失敗するので、推測で埋めずに止まる（無い欄を `stopped_reason` に書く）。作業名は計画書の冒頭に書いてある（`<計画名>-p<番号>`）。
@@ -86,7 +84,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack values <計画のデ�
 前の手順は、push の後に CI を待たずに終えている。前の push の CI と、1 つ前のフェーズの「push の後の確認」を、ここで確かめる。CI は同じ PR への次の push で取り消されるので、自分の push より前に確かめる。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack previous <計画のディレクトリ> <作業名>
+shipstack previous <計画のディレクトリ> <作業名>
 ```
 
 - 前景で実行し、終わるまで待つ（バックグラウンドや Monitor にしない）。`ci` が `pending` なら、もう一度実行する。3 回続けて `pending` なら待たずに進み、報告に書く
@@ -110,7 +108,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack previous <計画のデ
 1. 下書きを出す
 
    ```bash
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack commit-skeleton phase <計画書のパス>
+   shipstack commit-skeleton phase <計画書のパス>
    ```
 
 2. `<…>` の置き換える場所を埋める。各項目の書き方は [references/commit-message.md](references/commit-message.md) にある
@@ -121,7 +119,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack previous <計画のデ
    cat > "$msg" <<'EOF'
    <埋めたコミットメッセージの全文>
    EOF
-   ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack commit-check phase "$msg" --plan <計画書のパス> && git commit -F "$msg"
+   shipstack commit-check phase "$msg" --plan <計画書のパス> && git commit -F "$msg"
    ```
 
 ### 6. push と PR の更新
@@ -136,7 +134,7 @@ ${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack previous <計画のデ
 止まったときも書く（`--status stopped --stopped-reason "<止めた理由と、人に決めてほしいこと>"`）。
 
 ```bash
-${CLAUDE_SKILL_DIR}/../shipstack-shared/scripts/shipstack result <計画のディレクトリ> --name <作業名> --skill implementing-plan-phase --status done --commit <短いハッシュ> --pr <機能の PR の URL> --previous-ci <pass|fail|pending|none> --summary "<何をしたか、前の push の CI とその扱い、確かめた push の後の確認を 1〜3 行で。変えた約束、やめたテストのケース、従う決まりと CLAUDE.md の食い違いがあれば、それも>" --post-push "<push の後にしか確かめられなかった完了の条件>" --manual-step "<人が手で行う確認や作業>"
+shipstack result <計画のディレクトリ> --name <作業名> --skill implementing-plan-phase --status done --commit <短いハッシュ> --pr <機能の PR の URL> --previous-ci <pass|fail|pending|none> --summary "<何をしたか、前の push の CI とその扱い、確かめた push の後の確認を 1〜3 行で。変えた約束、やめたテストのケース、従う決まりと CLAUDE.md の食い違いがあれば、それも>" --post-push "<push の後にしか確かめられなかった完了の条件>" --manual-step "<人が手で行う確認や作業>"
 ```
 
 `--post-push` と `--manual-step` は数だけ繰り返し、無ければ付けない。結果ファイルは自己申告なので、事実（ハッシュ、URL、前の push の CI の結果）だけを書く。指揮役（`shipstack run`）は、これと git・PR・手元を照らして確かめる。
