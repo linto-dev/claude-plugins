@@ -5,7 +5,15 @@
 決まりに反する操作なら、理由を標準エラーに書いて終了コード 2 で止める（Claude Code がツールの呼び出しを取り消し、理由を Claude に返す）。
 反しなければ何も出さずに 0 で終わり、ふつうの許可の流れに任せる。
 
-これは間違いを止めるためのもので、わざと回り込む相手を防ぐものではない。コマンドは shlex で読み、引用符の中（コミットメッセージなど）とヒアドキュメントの本文は見ない。
+コマンドは bash と同じ区切りで読み、bash が動かすものはすべて同じ決まりで読む: シェルの予約語の後ろ（if … then、
+{ …; }、for … do、! など）、前置きの後ろ（env・timeout・nice・sudo など）、別のシェルに渡す文字列（bash -c、sh -c、
+eval）、コマンド置換（$(…)、`…`、<(…)。二重引用符の中と、引用符の無い区切りのヒアドキュメントの中も）、xargs と
+find -exec が動かすコマンド。xargs と find -exec が足す引数は読めないので、引数しだいで決まりに反する git・gh・wrangler
+を、それらで動かすことも止める。一重引用符の中（コミットメッセージなど）と、引用符の付いた区切りのヒアドキュメント
+（<<'EOF'）の本文は、bash も動かさないので見ない。
+
+これは間違いを止めるためのもので、わざと回り込む相手を防ぐものではない。変数で組み立てたコマンドの名前（$GIT push）、
+シェルに渡すスクリプトのファイルと標準入力（bash x.sh、… | bash）は読まない。
 
 使い方: guard.py <implement|decisions|finalize|merge-main>
 """
@@ -29,7 +37,40 @@ CAN_FINISH_PR = {"finalize"}
 SEPARATOR = re.compile(r"[;&|()]+")
 # shlex が切り出すリダイレクトの記号（>、>>、<、>&、&>、&>>）。
 REDIRECT = re.compile(r"[<>]+&?|&>>?")
-WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "env", "sudo"}
+# 単純なコマンドの頭に来るシェルの予約語。後ろの語が、動くコマンドになる（if git push …、{ git push …; } など）。
+RESERVED = {"!", "{", "}", "if", "then", "elif", "else", "fi", "do", "done", "while", "until", "for", "select",
+            "case", "esac", "coproc"}
+# 後ろの語をコマンドとして動かす前置きと、その前置きの、値を取るオプション。
+WRAPPERS = {
+    "command": set(), "builtin": set(), "nohup": set(), "exec": {"-a"},
+    "time": {"-o", "--output", "-f", "--format"},
+    "env": {"-u", "--unset", "-C", "--chdir", "-P"},
+    "sudo": {"-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "--close-from", "-D",
+             "--chdir", "-r", "--role", "-t", "--type", "-U", "--other-user", "-T", "--command-timeout"},
+    "timeout": {"-s", "--signal", "-k", "--kill-after"},
+    "nice": {"-n", "--adjustment"},
+    "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
+}
+# 前置きのうち、オプションの後に、コマンドより前の値を取るもの（timeout の時間）。
+WRAPPER_OPERANDS = {"timeout": 1}
+# -c に続く文字列をコマンドとして動かすシェルと、その値を取るオプション。
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"}
+SHELL_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
+XARGS_VALUE_OPTIONS = {"-a", "-d", "-E", "-I", "-J", "-L", "-n", "-P", "-R", "-s", "-S", "--arg-file", "--delimiter",
+                       "--eof", "--replace", "--max-lines", "--max-args", "--max-procs", "--max-chars"}
+FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}
+# 入れ子（bash -c の中の bash -c、コマンド置換の中のコマンド置換など）を読む深さの上限。
+MAX_DEPTH = 8
+# 引数を足して動かすと、足した引数しだいで決まりに反する git のサブコマンド（check_git が引数を見るもの）。
+GIT_CHECKED = {"push", "commit", "rebase", "pull", "reset", "checkout", "switch", "branch", "tag", "worktree", "merge",
+               "clean", "filter-branch", "filter-repo", "update-ref", "replace"}
+# 引数を足して動かすと、足した引数しだいで決まりに反する gh のコマンドと、そのうち読むだけの操作。
+GH_CHECKED = {"pr", "api", "repo", "release", "workflow", "secret", "variable"}
+GH_READS = {"pr": {"view", "list", "checks", "diff", "status"}, "repo": {"view", "list"},
+            "release": {"list", "view", "download"}, "workflow": {"list", "view"}, "secret": {"list"},
+            "variable": {"list", "get"}}
+# 読めなかったコマンドが git・gh・wrangler を動かしそうか。
+TOOLS = re.compile(r"(^|[\s;&|(){}`'\"])(git|gh|wrangler(@\S*)?)(\s|$)")
 # パッケージのコマンドを動かす前置き（npx wrangler、pnpm exec wrangler、pnpm dlx wrangler@4 など）。
 RUNNERS = {"npx", "pnpx", "pnpm", "yarn", "bunx", "bun"}
 WRANGLER = re.compile(r"wrangler(@[\w.^~-]+)?")
@@ -79,27 +120,195 @@ class Repo:
 # ---------------------------------------------------------------- コマンドを読む
 
 
-def strip_heredocs(command: str) -> str:
-    """ヒアドキュメントの本文を除く（コミットメッセージの中の文字をコマンドと取り違えないため）。"""
+def scan(command: str) -> tuple[str, list[str]] | None:
+    """bash と同じ区切りで読んだ文字列（ヒアドキュメントの本文とコメントを除き、引用符の外の改行を ; にしたもの）と、
+    bash が動かすコマンド置換の中身（$(…)、`…`、<(…)、>(…)）。読めなければ None。
+
+    コマンド置換は、二重引用符の中と、引用符の無い区切りのヒアドキュメント（<<EOF）の本文でも動く。一重引用符の中と、
+    引用符の付いた区切りのヒアドキュメント（<<'EOF'。コミットメッセージなど）の本文では動かないので見ない。"""
     out: list[str] = []
-    pending: list[tuple[str, bool]] = []
-    for line in command.split("\n"):
-        if pending:
-            delimiter, strip_tabs = pending[0]
-            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
-                pending.pop(0)
+    found: list[str] = []
+    pending: list[tuple[str, bool, bool]] = []  # ヒアドキュメントの区切り、行頭のタブを除くか、本文を展開するか
+    quote = ""
+    i, n = 0, len(command)
+    while i < n:
+        c = command[i]
+        if quote == "'":
+            quote = "" if c == "'" else quote
+            out.append(c)
+            i += 1
             continue
-        out.append(line)
-        for dash, quoted in re.findall(r"<<(-?)\s*(['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?)", line):
-            pending.append((quoted.strip("'\""), dash == "-"))
-    return "\n".join(out)
+        if c == "\\":
+            out.append(command[i:i + 2])
+            i += 2
+            continue
+        if c == "`" or (c == "$" and command[i + 1:i + 2] == "(") or \
+                (not quote and c in "<>" and command[i + 1:i + 2] == "("):
+            end = substitution_end(command, i)
+            if end is None:
+                return None
+            found.append(substitution_body(command, i, end))
+            out.append(command[i:end])
+            i = end
+            continue
+        if c == "'" and not quote:
+            quote = "'"
+        elif c == '"':
+            quote = "" if quote else '"'
+        elif not quote and command.startswith("<<<", i):
+            out.append("<<<")
+            i += 3
+            continue
+        elif not quote and command.startswith("<<", i):
+            operator = heredoc_operator(command, i)
+            if operator is not None:
+                end, heredoc = operator
+                pending.append(heredoc)
+                out.append(command[i:end])
+                i = end
+                continue
+        elif not quote and c == "#" and (i == 0 or command[i - 1] in " \t\n;&|()<>"):
+            # コメントは行の終わりまで。bash は動かさない。
+            end = command.find("\n", i)
+            i = n if end == -1 else end
+            continue
+        elif not quote and c == "\n":
+            # 改行もコマンドの区切り。引用符の中の改行は、文字列の中のまま残す（bash -c '…' の中で区切りになる）。
+            out.append(" ; ")
+            i += 1
+            for delimiter, strip_tabs, expands in pending:
+                body, i = heredoc_body(command, i, delimiter, strip_tabs)
+                if body is None:
+                    return None
+                if expands:
+                    inner = expansions(body)
+                    if inner is None:
+                        return None
+                    found.extend(inner)
+            pending = []
+            continue
+        out.append(c)
+        i += 1
+    if pending:
+        return None  # 本文と区切りの行の無いヒアドキュメント
+    return "".join(out), found
 
 
-def segments(command: str) -> list[list[str]] | None:
-    """コマンドを ; && || | などで切った、単純なコマンドの並び。読めなければ None。"""
-    text = strip_heredocs(command).replace("\\\n", " ")
-    # 改行もコマンドの区切り。引用符の中の改行は、トークンの中に入るだけで害はない。
-    text = text.replace("\n", " ; ")
+def substitution_end(text: str, i: int) -> int | None:
+    """text[i] から始まるコマンド置換（`…`、$(…)、<(…)、>(…)）の、終わりの次の位置。"""
+    if text[i] == "`":
+        j = i + 1
+        while j < len(text):
+            if text[j] == "\\":
+                j += 2
+            elif text[j] == "`":
+                return j + 1
+            else:
+                j += 1
+        return None
+    close = paren_end(text, i + 2)
+    return None if close is None else close + 1
+
+
+def substitution_body(text: str, i: int, end: int) -> str:
+    if text[i] == "`":
+        return re.sub(r"\\([$`\\])", r"\1", text[i + 1:end - 1])
+    return text[i + 2:end - 1]
+
+
+def paren_end(text: str, i: int) -> int | None:
+    """開いた括弧の直後 text[i] から読んで、対応する ) の位置。中の引用符とコマンド置換は飛ばす。"""
+    depth, quote = 1, ""
+    while i < len(text):
+        c = text[i]
+        if quote == "'":
+            quote = "" if c == "'" else quote
+        elif c == "\\":
+            i += 1
+        elif c == "'" and not quote:
+            quote = "'"
+        elif c == '"':
+            quote = "" if quote else '"'
+        elif c == "`" or (c == "$" and text[i + 1:i + 2] == "("):
+            end = substitution_end(text, i)
+            if end is None:
+                return None
+            i = end
+            continue
+        elif not quote and c == "(":
+            depth += 1
+        elif not quote and c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def heredoc_operator(text: str, i: int) -> tuple[int, tuple[str, bool, bool]] | None:
+    """text[i] の << から、区切りの語の終わりの位置と、（区切り、行頭のタブを除くか、本文を展開するか）。"""
+    k = i + 2
+    strip_tabs = text[k:k + 1] == "-"
+    k += 1 if strip_tabs else 0
+    while k < len(text) and text[k] in " \t":
+        k += 1
+    word: list[str] = []
+    quoted = False
+    while k < len(text) and text[k] not in " \t\n;&|<>()":
+        c = text[k]
+        if c in "'\"":
+            end = text.find(c, k + 1)
+            if end == -1:
+                return None
+            word.append(text[k + 1:end])
+            quoted, k = True, end + 1
+        elif c == "\\":
+            word.append(text[k + 1:k + 2])
+            quoted, k = True, k + 2
+        else:
+            word.append(c)
+            k += 1
+    if not word:
+        return None
+    return k, ("".join(word), strip_tabs, not quoted)
+
+
+def heredoc_body(text: str, i: int, delimiter: str, strip_tabs: bool) -> tuple[str | None, int]:
+    """text[i] の行から、区切りの行の前までの本文と、区切りの行の次の位置。区切りの行が無ければ None。"""
+    lines: list[str] = []
+    while True:
+        end = text.find("\n", i)
+        line = text[i:] if end == -1 else text[i:end]
+        if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+            return "\n".join(lines), len(text) if end == -1 else end + 1
+        if end == -1:
+            return None, i
+        lines.append(line)
+        i = end + 1
+
+
+def expansions(text: str) -> list[str] | None:
+    """引用符の無い区切りのヒアドキュメントの本文で、bash が動かすコマンド置換の中身（本文の引用符は、ただの文字）。"""
+    found: list[str] = []
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == "\\":
+            i += 2
+        elif c == "`" or (c == "$" and text[i + 1:i + 2] == "("):
+            end = substitution_end(text, i)
+            if end is None:
+                return None
+            found.append(substitution_body(text, i, end))
+            i = end
+        else:
+            i += 1
+    return found
+
+
+def segments(text: str) -> list[list[str]] | None:
+    """scan で読んだ文字列を ; && || | などで切った、単純なコマンドの並び。読めなければ None。"""
+    text = text.replace("\\\n", " ")
     lexer = shlex.shlex(text, posix=True, punctuation_chars=";&|()<>")
     lexer.whitespace_split = True
     lexer.commenters = ""
@@ -127,19 +336,81 @@ def segments(command: str) -> list[list[str]] | None:
 
 
 def program(argv: list[str]) -> list[str]:
-    """環境変数の代入や command・env などの前置きを除いた argv。"""
+    """環境変数の代入、シェルの予約語（if、then、{、! など）、command・env・timeout などの前置きを除いた argv。"""
     i = 0
     while i < len(argv):
         word = argv[i]
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", word):
+        name = os.path.basename(word)
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", word) or word in RESERVED:
             i += 1
-        elif os.path.basename(word) in WRAPPERS:
+        elif word == "function":
+            i += 2  # function <名前> { … }
+        elif name in WRAPPERS:
             i += 1
-            while i < len(argv) and argv[i].startswith("-"):
-                i += 1
+            while i < len(argv) and argv[i].startswith("-") and argv[i] != "-":
+                option = argv[i]
+                if option == "--":
+                    i += 1
+                    break
+                if name == "env" and (option in ("-S", "--split-string") or option.startswith("--split-string=")):
+                    # env -S '<コマンド>' は、文字列を語に分けて動かす。
+                    attached = option.startswith("--split-string=")
+                    value = option.split("=", 1)[1] if attached else " ".join(argv[i + 1:i + 2])
+                    try:
+                        words = shlex.split(value)
+                    except ValueError:
+                        words = value.split()
+                    return program(words + argv[i + (1 if attached else 2):])
+                i += 2 if option in WRAPPERS[name] else 1
+            i += WRAPPER_OPERANDS.get(name, 0)
         else:
             break
     return argv[i:]
+
+
+def shell_command(args: list[str]) -> tuple[bool, str | None]:
+    """シェル（bash など）の引数から、-c でコマンドを動かすかと、動かす文字列（-c の後の最初の語。無ければ None）。"""
+    i, runs = 0, False
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            i += 1
+            break
+        if arg in SHELL_VALUE_OPTIONS:
+            i += 2
+        elif arg.startswith("--"):
+            i += 1
+        elif re.fullmatch(r"[-+][A-Za-z]+", arg):
+            runs = runs or (arg[0] == "-" and "c" in arg[1:])
+            i += 1
+        else:
+            break
+    return runs, (args[i] if runs and i < len(args) else None)
+
+
+def xargs_command(args: list[str]) -> list[str]:
+    """xargs の引数から、xargs が動かすコマンド（無ければ echo）。"""
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        if args[i] == "--":
+            i += 1
+            break
+        i += 2 if args[i] in XARGS_VALUE_OPTIONS else 1
+    return args[i:] or ["echo"]
+
+
+def exec_commands(args: list[str]) -> list[list[str]]:
+    """find の引数から、-exec・-execdir・-ok・-okdir で動かすコマンド（\\; で区切られて、-exec から始まる続きも）。"""
+    commands, k = [], 0
+    while k < len(args):
+        if args[k] in FIND_EXEC:
+            end = k + 1
+            while end < len(args) and args[end] not in (";", "+"):
+                end += 1
+            commands.append(args[k + 1:end])
+            k = end
+        k += 1
+    return [c for c in commands if c]
 
 
 def has(args: list[str], *flags: str) -> bool:
@@ -177,8 +448,8 @@ def positionals(args: list[str], with_value: set[str] = frozenset()) -> list[str
 # ---------------------------------------------------------------- git
 
 
-def check_git(args: list[str], role: str, cwd: str) -> None:
-    # git -C <dir> などの前置きのオプションを読む。
+def split_git(args: list[str], cwd: str) -> tuple[str | None, list[str], str]:
+    """git の引数から、サブコマンドとその引数と、git -C <dir> を当てた作業場所。サブコマンドが無ければ None。"""
     i = 0
     while i < len(args) and args[i].startswith("-"):
         if args[i] == "-C" and i + 1 < len(args):
@@ -189,8 +460,14 @@ def check_git(args: list[str], role: str, cwd: str) -> None:
         else:
             i += 1
     if i >= len(args):
+        return None, [], cwd
+    return args[i], args[i + 1:], cwd
+
+
+def check_git(args: list[str], role: str, cwd: str) -> None:
+    sub, rest, cwd = split_git(args, cwd)
+    if sub is None:
         return
-    sub, rest = args[i], args[i + 1:]
     repo = Repo(cwd)
 
     if sub == "push":
@@ -393,27 +670,78 @@ def check_wrangler(args: list[str]) -> None:
 # ---------------------------------------------------------------- 入口
 
 
-def check_bash(command: str, role: str, cwd: str) -> None:
-    parsed = segments(command)
-    if parsed is None:
-        if re.search(r"(^|[\s;&|(])(git|gh|wrangler(@\S*)?)\s", command):
-            deny("コマンドを読めませんでした（引用符の対応など）。git・gh・wrangler は、1 つずつ単純な形で実行します")
+def check_added_arguments(argv: list[str], via: str) -> None:
+    """xargs・find -exec が引数を足して動かすコマンドのうち、足す引数しだいで決まりに反するものを止める（足す引数は読めない）。"""
+    name = os.path.basename(argv[0])
+    message = f"{via} で引数を足して {{}} を動かしません（足す引数が読めないため）。1 つずつ単純な形で実行します"
+    if name == "git":
+        sub = split_git(argv[1:], ".")[0]
+        if sub in GIT_CHECKED:
+            deny(message.format(f"git {sub}"))
+    elif name == "gh":
+        group, action = (argv[1:] + ["", ""])[:2]
+        if group in GH_CHECKED and action not in GH_READS.get(group, set()):
+            deny(message.format(f"gh {group}"))
+    elif name == "eval":
+        deny(message.format("eval"))
+    else:
+        wrangler = wrangler_args(argv)
+        if wrangler is not None and positionals(wrangler, WRANGLER_VALUE_FLAGS)[:1] in (
+                ["secret"], ["secrets-store"], ["versions"], ["deploy"]):
+            deny(message.format("wrangler"))
+
+
+def check_argv(argv: list[str], role: str, cwd: str, added: str, depth: int) -> str:
+    """単純なコマンド 1 つを確かめる。added は、引数を足して動かすもの（xargs・find -exec。無ければ空）。
+    返り値は、このコマンドの後の作業場所（cd を読む）。"""
+    argv = program(argv)
+    if not argv:
+        return cwd
+    name, args = os.path.basename(argv[0]), argv[1:]
+    if added:
+        check_added_arguments(argv, added)
+    if name == "cd" and args:
+        return str(Path(cwd, os.path.expanduser(args[0])))
+    if name in SHELLS:
+        runs, inner = shell_command(args)
+        if runs and inner is None and added:
+            deny(f"{added} で、シェルに動かすコマンドを渡しません（渡すコマンドが読めないため）。1 つずつ単純な形で実行します")
+        if inner is not None:
+            check_command(inner, role, cwd, added, depth + 1)
+    elif name == "eval":
+        check_command(" ".join(args), role, cwd, added, depth + 1)
+    elif name == "xargs":
+        check_argv(xargs_command(args), role, cwd, "xargs", depth + 1)
+    elif name == "find" or name in FIND_EXEC:
+        for command in exec_commands(argv if name in FIND_EXEC else args):
+            check_argv(command, role, cwd, "find -exec", depth + 1)
+    elif name == "git":
+        check_git(args, role, cwd)
+    elif name == "gh":
+        check_gh(args, role)
+    else:
+        wrangler = wrangler_args(argv)
+        if wrangler is not None:
+            check_wrangler(wrangler)
+    return cwd
+
+
+def check_command(command: str, role: str, cwd: str, added: str = "", depth: int = 0) -> None:
+    """コマンドの文字列を読み、決まりに反する操作があれば止める。bash -c・eval・コマンド置換の中も同じ決まりで読む。"""
+    scanned = scan(command) if depth <= MAX_DEPTH else None
+    parsed = segments(scanned[0]) if scanned is not None else None
+    if scanned is None or parsed is None:
+        if TOOLS.search(command):
+            deny("コマンドを読めませんでした（引用符や括弧の対応、深い入れ子など）。git・gh・wrangler は、1 つずつ単純な形で実行します")
         return
+    for body in scanned[1]:
+        check_command(body, role, cwd, added, depth + 1)
     for argv in parsed:
-        argv = program(argv)
-        if not argv:
-            continue
-        name = os.path.basename(argv[0])
-        if name == "cd" and len(argv) > 1:
-            cwd = str(Path(cwd, os.path.expanduser(argv[1])))
-        elif name == "git":
-            check_git(argv[1:], role, cwd)
-        elif name == "gh":
-            check_gh(argv[1:], role)
-        else:
-            wrangler = wrangler_args(argv)
-            if wrangler is not None:
-                check_wrangler(wrangler)
+        cwd = check_argv(argv, role, cwd, added, depth)
+
+
+def check_bash(command: str, role: str, cwd: str) -> None:
+    check_command(command, role, cwd)
 
 
 def main() -> int:
