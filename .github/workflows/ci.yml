@@ -8,20 +8,37 @@ on:
 permissions:
   contents: read
 
+# アクションは commit SHA で固定する（shipstack が計画に書かせる決まりと同じ）。版はコメントに残し、Dependabot が上げる。
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # README の「python3（3.9 以上）」の下限（macOS の /usr/bin/python3 の版）と、最新の版で流す。
+    # Python 3.9 の配布物は Ubuntu 24.04 までにしか無い（actions/python-versions）ので、runner を固定する。
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.15"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.12"
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: 共通のスクリプトの試験
         run: python3 -I -B -m unittest discover -s plugins/shipstack/skills/shipstack-shared/tests -v
       - name: shipstack の点検のスクリプトの試験
         run: python3 -I -B -m unittest discover -s .claude/skills/checking-shipstack/tests -v
-      - uses: actions/setup-node@v7
+
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
       - name: マーケットプレイスとプラグインの形

@@ -8,12 +8,16 @@ GitHub と Claude には出ない。gh と claude は tests/fakes/ の偽物に�
 
 from __future__ import annotations
 
+import contextlib
 import importlib.machinery
 import importlib.util
+import io
 import json
 import os
+import random
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -204,12 +208,56 @@ def sh(*args: str, cwd: Path | str) -> str:
     return subprocess.run(args, cwd=cwd, env=ENV, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def load_shipstack():
-    loader = importlib.machinery.SourceFileLoader("shipstack", str(SHIPSTACK))
-    spec = importlib.util.spec_from_loader("shipstack", loader)
+def load_script(name: str, path: Path):
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
     return module
+
+
+def load_shipstack():
+    return load_script("shipstack", SHIPSTACK)
+
+
+# シェルの書き方で、中のコマンド（CMD）を包む形。guard.py は、どれで包んでも中のコマンドを同じ決まりで読む。
+SHELL_WRAPPERS = [
+    "CMD",
+    "if true; then CMD; fi",
+    "if CMD; then :; fi",
+    "if false; then :; else CMD; fi",
+    "if false; then :; elif CMD; then :; fi",
+    "{ CMD; }",
+    "( CMD )",
+    "for i in 1; do CMD; done",
+    "while CMD; do break; done",
+    "! CMD",
+    "case x in x) CMD;; esac",
+    "f() { CMD; }; f",
+    "function g { CMD; }; g",
+    "true && CMD",
+    "false || CMD",
+    "echo x | CMD",
+    "CMD # note",
+    "true\nCMD",
+    "time CMD",
+    "env CMD",
+    "env -u HOME CMD",
+    "command CMD",
+    "nice -n 1 CMD",
+    "X=1 CMD",
+    "bash -c 'CMD'",
+    'sh -c "CMD"',
+    "bash -ec 'CMD'",
+    "eval 'CMD'",
+    'eval "CMD"',
+    "echo $(CMD)",
+    'echo "$(CMD)"',
+    "echo `CMD`",
+    'echo "`CMD`"',
+    "cat <(CMD)",
+    "cat <<EOF\n$(CMD)\nEOF",
+]
 
 
 def implement_command() -> str:
@@ -472,6 +520,167 @@ class GuardTest(Fixture):
     def test_unparseable_git_is_denied(self):
         self.assertDenied("implement", "git commit -m 'unterminated")
         self.assertAllowed("implement", "echo 'unterminated")
+
+    def test_shell_syntax_does_not_hide_a_denied_command(self):
+        for wrapper in SHELL_WRAPPERS:
+            for inner in ("git push --force", "gh pr merge 1"):
+                command = wrapper.replace("CMD", inner)
+                with self.subTest(command=command):
+                    self.assertDenied("implement", command)
+
+    def test_commands_run_by_other_commands_are_read(self):
+        for command in [
+            "timeout 60 git push --force",
+            "timeout -s KILL 60 git push origin main",
+            "sudo -u root git push --force",
+            "env -S 'git push --force'",
+            "if git diff --quiet; then git push --force; fi",
+            'git commit -m "$(git push --force)"',
+            "cat <<EOF\nnotes\n`gh pr merge 1`\nEOF",
+            "bash -c 'cat <<EOF\n$(git push --force)\nEOF'",
+            "find . -maxdepth 0 -exec git push --force \\;",
+            "find . -name x -exec true \\; -exec git push --force \\;",
+            "bash -c 'bash -c \"git push origin main\"'",
+            # case の型の ) は、コマンド置換の終わりではない（bash 4 以降。macOS の bash 3.2 は読み違えて何も動かさない）
+            'echo "$(case x in x) git push --force;; esac)"',
+            "cat <<EOF\n$(case x in (x) gh pr merge 1;; esac)\nEOF",
+        ]:
+            with self.subTest(command=command):
+                self.assertDenied("implement", command)
+
+    def test_arguments_added_by_xargs_and_find_are_not_trusted(self):
+        # xargs と find -exec が足す引数は読めないので、git・gh・wrangler の書き込みに引数を足す形は止める。
+        for command in [
+            "echo --force | xargs git push",
+            "echo main | xargs -n1 git push origin",
+            "echo 1 | xargs gh pr merge",
+            "echo 1 | xargs -I{} gh api repos/o/r/pulls/{}",
+            "printf 'x\\0' | xargs -0 bash -c",
+            "echo K | xargs npx wrangler secret put",
+            "find . -name '*.lock' -exec git checkout {} +",
+        ]:
+            with self.subTest(command=command):
+                self.assertDenied("implement", command)
+        for command in [
+            "git ls-files -m | xargs git add",
+            "git log --format=%h -3 | xargs -n1 git show --stat",
+            "echo 1 | xargs gh pr view",
+            "find . -name '*.ts' -exec grep -l x {} +",
+            "find . -name '*.sh' -exec bash -n {} \\;",
+        ]:
+            with self.subTest(command=command):
+                self.assertAllowed("implement", command)
+
+    def test_shell_syntax_around_allowed_commands_is_still_allowed(self):
+        for command in [
+            "if git diff --quiet; then echo clean; else git status --short; fi",
+            'for f in a b; do git add "$f"; done',
+            "{ git status; git log -1; } > /tmp/x",
+            "bash -c 'git status && git push'",
+            'echo "$(git rev-parse HEAD)"',
+            'git commit -m "use `pnpm test` to check"',
+            "git commit -F - <<EOF\nfeat: x\n\ngit push --force origin main\nEOF",
+            "timeout 600 git push",
+            "nice -n 5 git status",
+            "env -u FOO git status",
+            "echo $((1 << 2))",
+        ]:
+            with self.subTest(command=command):
+                self.assertAllowed("implement", command)
+
+
+class GuardShellOracleTest(Fixture):
+    """本物の bash を正解の役にして、生成したコマンドで guard.py を確かめる。
+
+    git と gh は、受け取った引数を記録するだけの偽物にする。bash が、止めるべき操作（FORBIDDEN）を実際に動かした
+    コマンドは、guard.py も止めていなければならない。シェルの読み方を確かめる検証器は無いので、本物のコードに
+    生成した入力を流す。種は固定する（落ちたら同じコマンドで再現できる）。"""
+
+    SEED = 20261124
+    COUNT = 400
+    FORBIDDEN_ATOMS = [
+        "git push --force",
+        "git push origin main",
+        "git push origin +HEAD",
+        "gh pr merge 1",
+        "git reset --hard HEAD~1",
+        "git rebase origin/main",
+        "echo --force | xargs git push",
+        "echo 1 | xargs gh pr merge",
+        "find . -maxdepth 0 -exec git push --force \\;",
+    ]
+    ALLOWED_ATOMS = ["git status", "git push", "git log -1", "gh pr view 1", "echo ok", ":"]
+    # bash の上で実際に動いたとき、止めるべき操作の引数（偽物の git・gh が記録する形）。
+    FORBIDDEN = {
+        ("git", "push", "--force"),
+        ("git", "push", "origin", "main"),
+        ("git", "push", "origin", "+HEAD"),
+        ("gh", "pr", "merge", "1"),
+        ("git", "reset", "--hard", "HEAD~1"),
+        ("git", "rebase", "origin/main"),
+    }
+
+    def setUp(self):
+        super().setUp()
+        # PATH で最初に見つかる bash（macOS に Homebrew の bash 5 があればそれ）。/bin/bash 3.2 は、
+        # $(case x in x) …;; esac) を読み違えて何も動かさないので、正解の役として弱い。
+        self.bash = shutil.which("bash")
+        if not self.bash:
+            self.skipTest("bash が無い")
+        self.feature_with_p1()
+        self.guard_module = load_script("shipstack_guard", GUARD)
+        box = Path(self.tmp.name) / "oracle"
+        self.bin, self.work, self.log = box / "bin", box / "work", box / "calls.log"
+        self.bin.mkdir(parents=True)
+        self.work.mkdir()
+        for name in ("git", "gh"):
+            stub = self.bin / name
+            stub.write_text('#!/bin/sh\n{ printf %s "${0##*/}"; for a in "$@"; do printf "\\037%s" "$a"; done; '
+                            'printf "\\n"; } >> "$ORACLE_LOG"\n')
+            stub.chmod(0o755)
+        self.oracle_env = {"PATH": f"{self.bin}{os.pathsep}/usr/bin{os.pathsep}/bin", "HOME": str(box),
+                           "ORACLE_LOG": str(self.log), "LC_ALL": "C"}
+
+    def run_in_bash(self, command: str) -> list[tuple[str, ...]]:
+        """bash が実際に動かした git と gh の呼び出し。"""
+        self.log.write_text("")
+        try:
+            subprocess.run([self.bash, "--noprofile", "--norc", "-c", command], cwd=self.work, env=self.oracle_env,
+                           stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        return [tuple(line.split("\x1f")) for line in self.log.read_text().splitlines() if line]
+
+    def denied(self, command: str) -> bool:
+        with contextlib.redirect_stderr(io.StringIO()):
+            try:
+                self.guard_module.check_bash(command, "implement", str(self.repo))
+            except SystemExit as stop:
+                return stop.code == 2
+        return False
+
+    def generate(self, rng: random.Random) -> str:
+        atoms = self.FORBIDDEN_ATOMS if rng.random() < 0.75 else self.ALLOWED_ATOMS
+        command = rng.choice(atoms)
+        for _ in range(rng.randint(1, 3)):
+            command = rng.choice(SHELL_WRAPPERS).replace("CMD", command)
+        if rng.random() < 0.3:
+            command = f"{rng.choice(self.ALLOWED_ATOMS)}{rng.choice(['; ', ' && ', chr(10)])}{command}"
+        return command
+
+    def test_whatever_bash_runs_that_is_forbidden_is_denied(self):
+        rng = random.Random(self.SEED)
+        reached, misses = 0, []
+        for _ in range(self.COUNT):
+            command = self.generate(rng)
+            calls = self.run_in_bash(command)
+            if any(call in self.FORBIDDEN for call in calls):
+                reached += 1
+                if not self.denied(command):
+                    misses.append(f"{command!r} → bash は {[' '.join(c) for c in calls]} を動かした")
+        # 生成したコマンドの多くが、止めるべき操作まで届いていなければ、この確かめは空回りしている。
+        self.assertGreaterEqual(reached, self.COUNT // 4, f"止めるべき操作まで届いたのは {reached} 件だけ")
+        self.assertEqual(misses, [], f"{len(misses)} 件が通った。初めの 5 件:\n" + "\n".join(misses[:5]))
 
 
 class PlanPhasesTest(Fixture):
