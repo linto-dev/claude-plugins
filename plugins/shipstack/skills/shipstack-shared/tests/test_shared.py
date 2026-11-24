@@ -541,6 +541,9 @@ class GuardTest(Fixture):
             "find . -maxdepth 0 -exec git push --force \\;",
             "find . -name x -exec true \\; -exec git push --force \\;",
             "bash -c 'bash -c \"git push origin main\"'",
+            # case の型の ) は、コマンド置換の終わりではない（bash 4 以降。macOS の bash 3.2 は読み違えて何も動かさない）
+            'echo "$(case x in x) git push --force;; esac)"',
+            "cat <<EOF\n$(case x in (x) gh pr merge 1;; esac)\nEOF",
         ]:
             with self.subTest(command=command):
                 self.assertDenied("implement", command)
@@ -619,7 +622,10 @@ class GuardShellOracleTest(Fixture):
 
     def setUp(self):
         super().setUp()
-        if not shutil.which("bash"):
+        # PATH で最初に見つかる bash（macOS に Homebrew の bash 5 があればそれ）。/bin/bash 3.2 は、
+        # $(case x in x) …;; esac) を読み違えて何も動かさないので、正解の役として弱い。
+        self.bash = shutil.which("bash")
+        if not self.bash:
             self.skipTest("bash が無い")
         self.feature_with_p1()
         self.guard_module = load_script("shipstack_guard", GUARD)
@@ -639,7 +645,7 @@ class GuardShellOracleTest(Fixture):
         """bash が実際に動かした git と gh の呼び出し。"""
         self.log.write_text("")
         try:
-            subprocess.run(["bash", "--noprofile", "--norc", "-c", command], cwd=self.work, env=self.oracle_env,
+            subprocess.run([self.bash, "--noprofile", "--norc", "-c", command], cwd=self.work, env=self.oracle_env,
                            stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
         except subprocess.TimeoutExpired:
             pass

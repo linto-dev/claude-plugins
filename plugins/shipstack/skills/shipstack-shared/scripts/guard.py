@@ -217,8 +217,9 @@ def substitution_body(text: str, i: int, end: int) -> str:
 
 
 def paren_end(text: str, i: int) -> int | None:
-    """開いた括弧の直後 text[i] から読んで、対応する ) の位置。中の引用符とコマンド置換は飛ばす。"""
-    depth, quote = 1, ""
+    """開いた括弧の直後 text[i] から読んで、対応する ) の位置。中の引用符とコマンド置換は飛ばす。
+    case … esac の中の、型を閉じる ) は数えない（$(case x in x) …;; esac) の最初の ) は、置換の終わりではない）。"""
+    depth, cases, quote = 1, 0, ""
     while i < len(text):
         c = text[i]
         if quote == "'":
@@ -235,12 +236,19 @@ def paren_end(text: str, i: int) -> int | None:
                 return None
             i = end
             continue
+        elif not quote and (i == 0 or text[i - 1] in " \t\n;&|(") and re.match(r"(case|esac)(?=[\s;&|)]|$)", text[i:]):
+            cases += 1 if text.startswith("case", i) else -1 if cases else 0
+            i += 4
+            continue
         elif not quote and c == "(":
             depth += 1
         elif not quote and c == ")":
-            depth -= 1
-            if depth == 0:
-                return i
+            if depth == 1 and cases:
+                pass  # case の型の終わり
+            else:
+                depth -= 1
+                if depth == 0:
+                    return i
         i += 1
     return None
 
