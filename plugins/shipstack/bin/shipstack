@@ -1896,6 +1896,16 @@ def launch_problems(init: dict, hooks_on: bool) -> list[str]:
     return problems
 
 
+def content_blocks(event: dict) -> list[dict]:
+    """stream-json の出来事の、発言の部品（text・tool_use など）。message が発言の辞書とは限らない。system/permission_denied の
+    message はモデルに返した拒否の文字列で（https://code.claude.com/docs/en/agent-sdk/typescript の SDKPermissionDeniedMessage）、
+    user の発言の content は文字列のこともある（同じページの SDKUserMessage の MessageParam）。どちらも部品なしとして扱う。
+    辞書と決めつけていたときは、ある計画の p6（2026-11-26）で分類器の拒否が 1 回流れたところで指揮役が落ち、ワーカーだけが残った。"""
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+
+
 def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> dict:
     """ワーカーを 1 つ動かす。resume があれば、新しい会話ではなく、途中で切れたその会話を続きから再開する。"""
     if resume:
@@ -1979,14 +1989,15 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
                 retrying["error"] = error
                 retrying["count"] += 1
                 continue
-            texts = [b.get("text") or "" for b in (event.get("message") or {}).get("content") or [] if b.get("type") == "text"]
+            blocks = content_blocks(event)
+            texts = [b.get("text") or "" for b in blocks if b.get("type") == "text"]
             api_error = bool(event.get("error")) or any(t.startswith("API Error") for t in texts)
             # 再試行を使い切ったときも、Claude Code は「API Error: …」を assistant の発言として流す。これは戻ったことにしない。
             if event.get("type") == "assistant" and retrying["since"] is not None and not api_error:
                 print(f"    ↺ API に戻りました（{int(time.time() - retrying['since']) // 60} 分待った）", flush=True)
                 retrying.update(since=None, error=None, notified=False, shown=0)
             if event.get("type") == "assistant":
-                for block in (event.get("message") or {}).get("content") or []:
+                for block in blocks:
                     if block.get("type") == "tool_use":
                         args = block.get("input") or {}
                         tool_inputs[block.get("id", "")] = str(args.get("command") or args.get("file_path") or args.get("url") or "")
@@ -2001,9 +2012,21 @@ def dispatch(plan: Plan, step: dict, root: str, resume: dict | None = None) -> d
             elif event.get("type") == "result":
                 final = event
         code = proc.wait()
-    except KeyboardInterrupt:
+    except BaseException as error:
+        # Ctrl+C のほか、指揮役が思いもよらない誤りで落ちたときも、ワーカーを止める。止めないと、ワーカーは確かめも記録も
+        # されないまま作業を続け、打ち直した run が同じ会話を同じチェックアウトで再開して、2 つが同時に動く（2026-11-26 に起きた）。
         proc.terminate()
         proc.wait()
+        if not isinstance(error, KeyboardInterrupt):
+            # Ctrl+C（cmd_run が記録する）と同じく会話を残し、指揮役を直して打ち直すと続きから再開する。誤りの中身は、
+            # この後に Python が出すトレースバックで見る。
+            append_history(plan, {"at": now(), "name": step["name"], "skill": step["skill"], "session_id": session_id,
+                                  "config_dir": account, "resumes": resumes, "ok": False, "stopped": False, "interrupted": True,
+                                  "problems": [f"指揮役が思いもよらない誤りで止まりました: {type(error).__name__}: {error}"[:300]]})
+            write_active(plan, {**(read_active(plan) or {}), "reason": "指揮役が思いもよらない誤りで止まり、ワーカーも止めた"})
+            notify(f"{step['name']}: 指揮役が思いもよらない誤りで止まりました")
+            say(f"■ 指揮役が思いもよらない誤りで止まったので、{step['name']} のワーカーも止めました。shipstack を直してから"
+                f"同じコマンドを打ち直すと、この会話の続きから再開します: shipstack run {plan.dir}")
         raise
     return {"session_id": session_id, "config_dir": account, "exit_code": code, "started": started, "resumes": resumes,
             "seconds": int(time.time() - began), "api_retries": retrying["count"],

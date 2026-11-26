@@ -1065,6 +1065,7 @@ class RunTest(Fixture):
         self.assertFalse(Path(self.env["FAKE_CLAUDE_LOG"]).exists())
 
     def test_denials_are_recorded(self):
+        """拒否の出来事の message は文字列（モデルに返した拒否の文）。発言の辞書と読んで落ちない（2026-11-26 に落ちた）。"""
         proc = self.run_plan("--once", env={"FAKE_CLAUDE_DENY": "gh pr edit 1 --add-label preview"})
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("⚠ 権限で拒否: [External System Writes] — gh pr edit 1 --add-label preview", proc.stdout)
@@ -1222,6 +1223,39 @@ class RunTest(Fixture):
         self.assertEqual(len(p1), 2)
         self.assertEqual(self.session_of(p1[1]), self.session_of(p1[0]))
         self.assertIn("人が Ctrl+C で止めた", p1[1]["prompt"])
+
+    def test_conductor_error_stops_the_worker_and_keeps_the_conversation(self):
+        """指揮役が思いもよらない誤りで落ちても、ワーカーを残さない。残すと、確かめも記録もされないまま作業を続け、打ち直した run が
+        同じ会話を同じチェックアウトで再開して、2 つが同時に動く（2026-11-26 に起きた）。会話は Ctrl+C と同じく続きから再開する。"""
+        out = Path(self.tmp.name) / "run.out"
+        with out.open("w") as f:
+            # ワーカーは指揮役の標準エラーを受け継ぐ。パイプで受けると、残ったワーカーが終わるまで待ってしまうので、ファイルで受ける
+            proc = subprocess.run([sys.executable, "-I", str(SHIPSTACK), "run", str(self.plan)], cwd=self.repo,
+                                  env={**self.env, "FAKE_CLAUDE_UNREADABLE": "demo-p1"}, stdout=f, stderr=subprocess.STDOUT,
+                                  stdin=subprocess.DEVNULL, timeout=30)
+        text = out.read_text()
+        worker = int(Path(self.env["FAKE_CLAUDE_LOG"] + ".unreadable").read_text())
+        try:
+            os.kill(worker, 0)
+            alive = True
+        except ProcessLookupError:
+            alive = False
+        if alive:
+            os.kill(worker, 9)
+        self.assertFalse(alive, f"指揮役が落ちた後もワーカー（PID {worker}）が動いています\n{text}")
+        self.assertEqual(proc.returncode, 1, text)
+        self.assertIn("■ 指揮役が思いもよらない誤りで止まったので、demo-p1 のワーカーも止めました", text)
+        self.assertIn("AttributeError", text)  # 直すための手がかりとして、トレースバックは出す
+        entry = self.history()[-1]
+        self.assertEqual((entry["name"], entry["ok"], entry["interrupted"]), ("demo-p1", False, True))
+        self.assertTrue(entry["problems"][0].startswith("指揮役が思いもよらない誤りで止まりました: AttributeError"))
+        self.assertEqual(load_shipstack().recent_failures(self.history(), "demo-p1"), 0)
+        again = self.run_plan("--once")
+        self.assertEqual(again.returncode, 0, again.stdout)
+        p1 = [c for c in self.worker_calls() if "phase-01.md" in c["prompt"]]
+        self.assertEqual(len(p1), 2)
+        self.assertEqual(self.session_of(p1[1]), self.session_of(p1[0]))
+        self.assertIn("指揮役が思いもよらない誤りで止まり、ワーカーも止めた", p1[1]["prompt"])
 
     def test_interruption_recorded_by_the_old_run_is_resumed(self):
         """active.json を書く前の指揮役が「ワーカーが失敗で終わりました」と記録したワーカーも、手元が汚れていれば再開する。"""
