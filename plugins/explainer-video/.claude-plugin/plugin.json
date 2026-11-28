@@ -1,0 +1,13 @@
+{
+  "name": "explainer-video",
+  "description": "原稿（解説・ノート・記事・資料）から、図と字幕と VOICEVOX の読み上げで解説する動画を Remotion で作る（企画と台本・読み上げ・シーン・点検・書き出しまで。雛形のプロジェクトつき）",
+  "version": "0.1.0",
+  "author": {
+    "name": "linto-dev",
+    "url": "https://github.com/linto-dev"
+  },
+  "homepage": "https://github.com/linto-dev/claude-plugins/tree/main/plugins/explainer-video",
+  "repository": "https://github.com/linto-dev/claude-plugins",
+  "license": "MIT",
+  "keywords": ["remotion", "video", "explainer", "voicevox", "narration", "japanese", "shadcn", "tailwind"]
+}

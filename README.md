@@ -5,6 +5,7 @@ linto-dev の [Claude Code](https://code.claude.com/docs) プラグインのマ�
 | プラグイン | 中身 |
 | --- | --- |
 | [shipstack](plugins/shipstack/README.md) | 要件定義から実装計画、フェーズごとの実装、機能の PR の仕上げまでを、人に聞かないワーカーで進める開発フロー（Cloudflare と TypeScript のモノレポ向け。受託・自社・個人のどの開発でも使える） |
+| [explainer-video](plugins/explainer-video/README.md) | 原稿（解説・ノート・記事・資料）から、図と字幕と VOICEVOX の読み上げで解説する動画を Remotion で作る。企画と台本・読み上げ・シーン・点検・書き出しまでを工程ごとのスキルで進める（雛形のプロジェクトつき） |
 
 ## 入れ方
 
@@ -13,9 +14,10 @@ Claude Code の会話で次を打ちます。
 ```txt
 /plugin marketplace add linto-dev/claude-plugins
 /plugin install shipstack@linto-dev
+/plugin install explainer-video@linto-dev
 ```
 
-スキルは `/shipstack:defining-requirements` のように、プラグインの名前を付けて呼びます。使い方は各プラグインの README にあります。
+スキルは `/shipstack:defining-requirements`・`/explainer-video:making-video` のように、プラグインの名前を付けて呼びます。使い方は各プラグインの README にあります。
 
 ## shipstack の点検（このリポジトリの開発）
 
@@ -37,11 +39,12 @@ python3 -I -B -m unittest discover -s .claude/skills/checking-shipstack/tests -v
 
 ## English
 
-A Claude Code plugin marketplace. `shipstack` is a development workflow that turns a feature request into a requirements document and an implementation plan (both settled with you interactively), then implements the plan phase by phase with unattended `claude -p` workers, one commit per phase, and finalizes the feature pull request. The skills are written in Japanese and assume a Cloudflare + TypeScript monorepo.
+A Claude Code plugin marketplace. `explainer-video` turns a Japanese source document into a narrated explainer video with Remotion (planning, VOICEVOX narration, scenes, independent review, rendering), shipping a project template. `shipstack` is a development workflow that turns a feature request into a requirements document and an implementation plan (both settled with you interactively), then implements the plan phase by phase with unattended `claude -p` workers, one commit per phase, and finalizes the feature pull request; it assumes a Cloudflare + TypeScript monorepo. The skills of both plugins are written in Japanese.
 
 ```txt
 /plugin marketplace add linto-dev/claude-plugins
 /plugin install shipstack@linto-dev
+/plugin install explainer-video@linto-dev
 ```
 
 ## ライセンス

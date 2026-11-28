@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+.env
+
+# 書き出した動画・静止画・確認用のファイル
+out
+
+# 読み上げ音声は npm run voice で作り直せる（長い動画では数百 MB になる）
+public/voice
