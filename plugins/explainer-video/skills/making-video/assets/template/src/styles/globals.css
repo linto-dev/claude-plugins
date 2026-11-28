@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@import "shadcn/tailwind.css";
+
+/*
+  配色は shadcn/ui の Vega（Base UI）・Neutral の既定値（npx shadcn init --preset vega -b base で生成したもの）。
+  動画はライト表示だけなので .dark は持たない。サイト向けのもの（sidebar・chart・影）も持たない。
+  見た目を差し替えるときは :root の値を変える（DESIGN.md の「見た目を差し替える」）。
+
+  動画用に足したトークン:
+  - --marker: 蛍光ペンのマーカーと、解説の要点（emphasis）の地。Neutral の secondary は白地と見分けにくいので別に持つ
+  - --figure-*: 図の配色（Okabe-Ito）。線は白地に 3:1 以上、文字は淡色の上で 4.5:1 以上、濃色は白文字に 4.5:1 以上
+*/
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  /* shadcn の既定（0.556）は白地に 4.5:1 届かないので、本文の補足に使える濃さに下げた */
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  /* 1920×1080 の画面に合わせて 1.5 倍（shadcn の既定は 0.625rem） */
+  --radius: 15px;
+
+  --marker: oklch(0.94 0.11 96);
+  --marker-foreground: oklch(0.33 0.07 85);
+
+  --figure-blue: #0072b2;
+  --figure-blue-text: #005a8c;
+  --figure-blue-tint: #e8f2fa;
+  --figure-blue-solid: #0072b2;
+  --figure-vermillion: #d55e00;
+  --figure-vermillion-text: #a64900;
+  --figure-vermillion-tint: #fdeee3;
+  --figure-vermillion-solid: #b34f00;
+  --figure-green: #009e73;
+  --figure-green-text: #006b4f;
+  --figure-green-tint: #e4f4ee;
+  --figure-green-solid: #00785a;
+  --figure-gray: #8c8c8c;
+  --figure-gray-text: #595959;
+  --figure-gray-tint: #f2f2f2;
+  --figure-gray-solid: #595959;
+  --figure-ink: #1f1f1f;
+}
+
+@theme inline {
+  --font-sans: "Noto Sans JP", sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: "Noto Sans Mono", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-marker: var(--marker);
+  --color-marker-foreground: var(--marker-foreground);
+
+  --color-figure-blue: var(--figure-blue);
+  --color-figure-blue-text: var(--figure-blue-text);
+  --color-figure-blue-tint: var(--figure-blue-tint);
+  --color-figure-blue-solid: var(--figure-blue-solid);
+  --color-figure-vermillion: var(--figure-vermillion);
+  --color-figure-vermillion-text: var(--figure-vermillion-text);
+  --color-figure-vermillion-tint: var(--figure-vermillion-tint);
+  --color-figure-vermillion-solid: var(--figure-vermillion-solid);
+  --color-figure-green: var(--figure-green);
+  --color-figure-green-text: var(--figure-green-text);
+  --color-figure-green-tint: var(--figure-green-tint);
+  --color-figure-green-solid: var(--figure-green-solid);
+  --color-figure-gray: var(--figure-gray);
+  --color-figure-gray-text: var(--figure-gray-text);
+  --color-figure-gray-tint: var(--figure-gray-tint);
+  --color-figure-gray-solid: var(--figure-gray-solid);
+  --color-figure-ink: var(--figure-ink);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+  1920×1080 の解説動画の文字と余白の段階（DESIGN.md の「文字」）。
+  Tailwind の既定（rem）は Web の画面向けなので、動画の画面に合わせて px で持つ。
+  text-xs は使わない（最小の text-sm と同じ大きさにしてある）。行の高さは Tailwind の既定の比のまま。
+*/
+@theme {
+  --spacing: 6px;
+  --text-xs: 21px;
+  --text-sm: 21px;
+  --text-base: 24px;
+  --text-lg: 27px;
+  --text-xl: 30px;
+  --text-2xl: 36px;
+  --text-3xl: 45px;
+  --text-4xl: 54px;
+  --text-5xl: 72px;
+  --text-6xl: 90px;
+}
+
+/* 日本語を文節の境目で折り返す（src/lib/phrase.tsx の Phrase が <wbr> を入れる） */
+@utility break-phrase {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-break: strict;
+  text-wrap: pretty;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    @apply bg-background font-sans text-foreground;
+  }
+}
+
+/*
+  Remotion はフレームごとに描くので、CSS の遷移と animation は書き出しでちらつく（https://www.remotion.dev/docs/flickering）。
+  shadcn/ui の部品に残っていても効かないように、ここで止める。動きは useCurrentFrame() から計算して style に書く。
+*/
+*,
+*::before,
+*::after {
+  /* biome-ignore lint/complexity/noImportantStyles: 部品のクラスより必ず優先させるため */
+  transition: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: 部品のクラスより必ず優先させるため */
+  animation: none !important;
+}

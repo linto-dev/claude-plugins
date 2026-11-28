@@ -1,0 +1,97 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": false
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!.agents",
+      "!.claude",
+      "!**/out",
+      "!public/voice",
+      "!src/videos/*/voice.ts",
+      "!src/components/ui",
+      "!**/*.md"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "tailwind": {
+    "stylesheet": "src/styles/globals.css",
+    "mergeFunctions": ["cn", "clsx", "twMerge"],
+    "variantFunctions": ["cva"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        "noSvgWithoutTitle": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "info"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "off"
+      },
+      "nursery": {
+        "useTailwindSortedClasses": {
+          "level": "warn",
+          "fix": "safe"
+        },
+        "noTailwindArbitraryValue": {
+          "level": "error",
+          "options": {
+            "allowedClasses": [
+              "min-w-[3.2em]",
+              "px-[0.3em]",
+              "px-[0.5em]",
+              "text-[0.8em]",
+              "w-[1.6em]",
+              "w-[4.5em]",
+              "w-[7em]"
+            ]
+          }
+        },
+        "noTailwindRawColors": "error",
+        "noTailwindConflictingClasses": "error",
+        "useTailwindStaticClassStrings": "error"
+      },
+      "style": {
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

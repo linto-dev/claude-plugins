@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.ts",
+    "remotion.config.ts",
+    "scripts/*.ts",
+    "src/videos/*/{plan,script,voice}.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.ts"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["ffmpeg"],
+  "ignoreIssues": {
+    "src/components/ui/**": ["exports", "types"],
+    "src/parts/**": ["exports", "types"],
+    "src/lib/palette.ts": ["exports", "types"],
+    "src/lib/text.ts": ["exports", "types"],
+    "src/lib/anim.ts": ["exports"]
+  }
+}

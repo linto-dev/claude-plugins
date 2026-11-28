@@ -10,6 +10,11 @@
       "name": "shipstack",
       "source": "./plugins/shipstack",
       "description": "要件定義から計画、フェーズごとの実装、PR の仕上げまでを、人に聞かないワーカーで進める開発フロー（Cloudflare と TypeScript のモノレポ向け）"
+    },
+    {
+      "name": "explainer-video",
+      "source": "./plugins/explainer-video",
+      "description": "原稿から、図と字幕と VOICEVOX の読み上げで解説する動画を Remotion で作る（企画と台本・読み上げ・シーン・点検・書き出しまで）"
     }
   ]
 }
